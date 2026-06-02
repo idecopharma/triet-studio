@@ -121,21 +121,81 @@ export default function App() {
       };
 
       rec.onresult = (event: any) => {
-        let finalTranscript = "";
+        let finalSegments: string[] = [];
         let interimTranscript = "";
+
         for (let i = 0; i < event.results.length; ++i) {
           const result = event.results[i];
           if (!result) continue;
-          const text = result[0]?.transcript || "";
+          const text = (result[0]?.transcript || "").trim();
+          if (!text) continue;
+
           if (result.isFinal) {
-            finalTranscript += text + " ";
+            // Android Chrome highly duplicates previous spoken blocks in consecutive separate result items.
+            // We ignore a final segment if it is already fully contained as a prefix inside any LATER final segment.
+            let isDuplicatePrefix = false;
+            for (let j = i + 1; j < event.results.length; ++j) {
+              const laterResult = event.results[j];
+              if (laterResult && laterResult.isFinal) {
+                const laterText = (laterResult[0]?.transcript || "").trim();
+                if (laterText.toLowerCase().includes(text.toLowerCase())) {
+                  isDuplicatePrefix = true;
+                  break;
+                }
+              }
+            }
+            if (!isDuplicatePrefix) {
+              finalSegments.push(text);
+            }
           } else {
-            interimTranscript += text;
+            interimTranscript = text;
           }
         }
-        
+
+        // Join final segments cleanly
+        let cleanFinalText = "";
+        for (const segment of finalSegments) {
+          if (!cleanFinalText) {
+            cleanFinalText = segment;
+          } else {
+            // Check if there is some overlap or duplicate joining
+            cleanFinalText += " " + segment;
+          }
+        }
+
+        // Deduplicate consecutive identical words that might be generated due to mobile environment lag
+        const words = cleanFinalText.split(/\s+/);
+        const cleanWords: string[] = [];
+        for (let w = 0; w < words.length; w++) {
+          const currentWord = words[w];
+          if (w > 0 && currentWord.toLowerCase() === words[w - 1].toLowerCase()) {
+            continue;
+          }
+          cleanWords.push(currentWord);
+        }
+
+        let speech = cleanWords.join(" ");
+        if (interimTranscript) {
+          // If interim contains text, split and filter consecutive word duplicates too
+          const interimWords = interimTranscript.split(/\s+/);
+          const cleanInterimWords: string[] = [];
+          for (let iw = 0; iw < interimWords.length; iw++) {
+            const curInterimWord = interimWords[iw];
+            if (iw === 0 && cleanWords.length > 0 && curInterimWord.toLowerCase() === cleanWords[cleanWords.length - 1].toLowerCase()) {
+              continue;
+            }
+            if (iw > 0 && curInterimWord.toLowerCase() === interimWords[iw - 1].toLowerCase()) {
+              continue;
+            }
+            cleanInterimWords.push(curInterimWord);
+          }
+          const formattedInterim = cleanInterimWords.join(" ");
+          if (formattedInterim) {
+            speech += (speech ? " " : "") + formattedInterim;
+          }
+        }
+
         const base = initialIdeaRef.current.trim();
-        const speech = (finalTranscript + interimTranscript).trim();
         const fullText = base ? base + " " + speech : speech;
         setIdea(fullText);
       };
