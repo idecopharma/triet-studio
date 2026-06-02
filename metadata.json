@@ -1,0 +1,6 @@
+{
+  "name": "STUDIO-TRIET",
+  "description": "Hệ thống xây dựng kịch bản video chuyên nghiệp, phân tích nhân vật và sản phẩm bằng AI để biên dịch prompt cảnh quay, tối ưu hóa thời lượng và nội dung đồng bộ.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
