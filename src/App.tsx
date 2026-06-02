@@ -55,6 +55,11 @@ export default function App() {
   const [idea, setIdea] = useState("");
   const [durationGroup, setDurationGroup] = useState<"10s" | "8s">("10s");
   const [totalDuration, setTotalDuration] = useState<number>(20); // Default to 20s for 10s group
+  const [screenplayStyle, setScreenplayStyle] = useState<"cinematic" | "daily" | "commercial">("cinematic");
+
+  // Speech Recognition State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Generation & Workspace State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -99,6 +104,91 @@ export default function App() {
     setDurationGroup("10s");
     setTotalDuration(20);
     showNotification("Đã tải dữ liệu mẫu STUDIO-TRIET mẫu nhanh!", "success");
+  };
+
+  // Speech Recognition Setup & Handlers
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "vi-VN";
+
+      rec.onstart = () => {
+        setIsListening(true);
+      };
+
+      rec.onresult = (event: any) => {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript + " ";
+          }
+        }
+        if (finalTranscript) {
+          setIdea(prev => {
+            const trimmed = prev.trim();
+            return trimmed ? trimmed + " " + finalTranscript.trim() : finalTranscript.trim();
+          });
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        if (event.error === "not-allowed") {
+          showNotification("Quyền truy cập micro ghi âm bị từ chối.", "error");
+        } else if (event.error !== "no-speech") {
+          showNotification("Lỗi ghi âm giọng nói: " + event.error, "error");
+        }
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = rec;
+    }
+  }, []);
+
+  const startListening = () => {
+    if (!recognitionRef.current) {
+      showNotification("Trình duyệt không hỗ trợ chuyển đổi Giọng nói hoặc cần cấp quyền micro.", "error");
+      return;
+    }
+    try {
+      recognitionRef.current.start();
+      showNotification("Đang mở micro... Vui lòng nói ý tưởng kịch bản bằng tiếng Việt.", "info");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      showNotification("Đã tạm dừng nhận diện giọng nói.", "info");
+    }
+  };
+
+  const clearAndRestartListening = () => {
+    setIdea("");
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+      setTimeout(() => {
+        try {
+          recognitionRef.current.start();
+          showNotification("Đã dọn dẹp và bắt đầu lắng nghe mới...", "info");
+        } catch (err) {
+          console.error(err);
+        }
+      }, 300);
+    } else {
+      showNotification("Đã xóa sạch nội dung kịch bản cũ.", "info");
+    }
   };
 
   // Display custom Toast notification
@@ -349,7 +439,8 @@ export default function App() {
           characters: characters,
           product: product,
           totalDuration: totalDuration,
-          durationGroup: durationGroup
+          durationGroup: durationGroup,
+          style: screenplayStyle
         })
       });
 
@@ -950,6 +1041,98 @@ Sản xuất bởi STUDIO-TRIET.
                   rows={4}
                   className="w-full bg-stone-50/50 p-4 rounded-xl border border-stone-200 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors leading-relaxed placeholder:text-stone-400 font-medium text-stone-800 shadow-inner"
                 />
+
+                {/* Voice-to-Text Action Bar */}
+                <div className="flex flex-wrap items-center gap-2 mt-1 px-1">
+                  <span className="text-[10.5px] font-bold text-stone-500 mr-auto flex items-center gap-1.5">
+                    <Mic className={`w-3.5 h-3.5 ${isListening ? "text-rose-500 animate-pulse" : "text-stone-400"}`} />
+                    {isListening ? (
+                      <span className="text-rose-600 font-extrabold flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping inline-block" />
+                        Đang ghi âm giọng nói chuyển văn bản...
+                      </span>
+                    ) : "Chuyển giọng nói:"}
+                  </span>
+
+                  {!isListening ? (
+                    <button
+                      onClick={startListening}
+                      type="button"
+                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                      title="Bắt đầu nói để tự ghi kịch bản"
+                    >
+                      <Mic className="w-3.5 h-3.5 text-emerald-650" />
+                      Nhấp nói (Micro)
+                    </button>
+                  ) : (
+                    <button
+                      onClick={stopListening}
+                      type="button"
+                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-black flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                      title="Tắt micro"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-rose-600 animate-pulse" />
+                      Dừng
+                    </button>
+                  )}
+
+                  <button
+                    onClick={clearAndRestartListening}
+                    type="button"
+                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-350 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                    title="Xóa ý tưởng cũ và nói lại từ đầu"
+                  >
+                    <RefreshCw className="w-3 h-3 text-stone-600" />
+                    Xóa nói lại
+                  </button>
+                </div>
+              </div>
+
+              {/* Professional Style Selection */}
+              <div className="space-y-2.5">
+                <label className="text-[11.5px] font-bold text-stone-500 uppercase tracking-wider block">
+                  Phong cách bối cảnh & nghệ thuật (AI Drama / Cinematic Style)
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    onClick={() => setScreenplayStyle("cinematic")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-2 ${
+                      screenplayStyle === "cinematic"
+                        ? "bg-emerald-600 border-emerald-600 text-white shadow-md font-black"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    Điện ảnh
+                  </button>
+                  <button
+                    onClick={() => setScreenplayStyle("daily")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-2 ${
+                      screenplayStyle === "daily"
+                        ? "bg-emerald-600 border-emerald-600 text-white shadow-md font-black"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Sinh hoạt
+                  </button>
+                  <button
+                    onClick={() => setScreenplayStyle("commercial")}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border flex items-center justify-center gap-2 ${
+                      screenplayStyle === "commercial"
+                        ? "bg-emerald-600 border-emerald-600 text-white shadow-md font-black"
+                        : "bg-white border-stone-200 text-stone-600 hover:bg-stone-50"
+                    }`}
+                  >
+                    <Package className="w-3.5 h-3.5" />
+                    Quảng cáo
+                  </button>
+                </div>
+                <p className="text-[10.5px] tracking-wide text-stone-500 font-semibold leading-relaxed">
+                  {screenplayStyle === "cinematic" && "🎬 Phong cách Điện ảnh: Bối cảnh kỳ vĩ, tương phản nghệ thuật cao kiểu Hollywood, camera chậm rực sắc độ."}
+                  {screenplayStyle === "daily" && "🏡 Phong cách Sinh hoạt: Góc quay dã ngoại cầm tay mộc mạc, ánh sáng ban ngày chân thật, thoại tự nhiên gần gũi."}
+                  {screenplayStyle === "commercial" && "🛍️ Phong cách Quảng cáo: Điểm nhấn nhãn mác cấu trúc sản phẩm sành điệu, ánh sáng studio mịn màng, camera bay lướt."}
+                </p>
               </div>
 
               {/* Configuration Panel: Duration intervals & total duration */}

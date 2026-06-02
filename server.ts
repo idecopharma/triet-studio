@@ -93,7 +93,7 @@ app.post("/api/analyze-product", async (req, res) => {
 // 3. API: Generate Screenplay and Prompts
 app.post("/api/generate-screenplay", async (req, res) => {
   try {
-    const { idea, characters, product, totalDuration, durationGroup } = req.body;
+    const { idea, characters, product, totalDuration, durationGroup, style } = req.body;
     if (!idea || !totalDuration || !durationGroup) {
       return res.status(400).json({ error: "Missing required screenplay parameters" });
     }
@@ -104,6 +104,16 @@ app.post("/api/generate-screenplay", async (req, res) => {
     const maxWords = durationUnit === 10 ? 25 : 18;
 
     const ai = getGenAI();
+
+    // Map screenplay style choices for highly tailored outputs
+    let styleDescription = "PHONG CÁCH MẶC ĐỊNH: Đa dạng, linh hoạt và cân bằng giữa nghệ thuật lẫn thương mại.";
+    if (style === "cinematic") {
+      styleDescription = "PHONG CÁCH ĐIỆN ẢNH (Cinematic Cinematic Cinematic): Bố cục khung hình hoành tráng phong cách điện ảnh Hollywood, bối cảnh tỉ mỉ sâu sắc, độ tương phản ánh sáng nghệ thuật cao (high contrast chiaroscuro), chuyển động camera mượt mà có nhịp điệu (slow cinematic panning/tracking/push-in), diễn tả nội tâm và cảm xúc nhân vật lắng đọng.";
+    } else if (style === "daily") {
+      styleDescription = "PHONG CÁCH ĐỜI SỐNG SINH HOẠT (Slice-of-life/Daily/Vlogger): Góc quay chân thực sắc bén giống máy quay cầm tay hoặc máy quay Vlog mộc mạc, ánh sáng ban ngày tự nhiên tràn ngập, động thái mộc mạc chân thật, bối cảnh đời thường gần gũi sống động đầy sinh khí.";
+    } else if (style === "commercial") {
+      styleDescription = "PHONG CÁCH QUẢNG CÁO THƯƠNG MẠI (Commercial Brand Promo): Bố cục hiện đại, màu sắc rực rỡ tươi sáng bắt mắt, ánh sáng studio căng mịn sang trọng (stylized key light/rim light rõ nét), góc máy chuyển động nhanh sôi động trẻ trung, zoom cận cảnh cực nét chi tiết cấu trúc góc viền nhãn mác sản phẩm và hành trình xúc cảm người mua.";
+    }
 
     // Structure characters descriptions
     let charactersInfo = "Không sử dụng nhân vật ngoại cảnh đặc biệt.";
@@ -124,11 +134,14 @@ app.post("/api/generate-screenplay", async (req, res) => {
   + Đặc điểm nhận dạng & chi tiết nhãn: ${product.description}`;
     }
 
-    const promptText = `Bạn là một biên kịch và kỹ sư thiết kế prompt (prompt engineer) video chuyên nghiệp dạn dày kinh nghiệm tại STUDIO-TRIET.
+    const promptText = `Bạn là một biên kịch danh tiếng và kỹ sư thiết kế prompt (prompt engineer) video chuyên nghiệp dạn dày kinh nghiệm tại STUDIO-TRIET.
 Nhiệm vụ của bạn là chuyển thể Ý tưởng kịch bản (Idea) dưới đây thành một kịch bản video từng phân cảnh đồng bộ, tối ưu thời lượng và nhất quán về nhân vật lẫn sản phẩm.
 
-Ý TƯỞNG KỊCH BẢN:
+Ý TƯỞNG KỊCH BẢN CHỦ ĐẠO:
 "${idea}"
+
+YÊU CẦU PHONG CÁCH NGHỆ THUẬT CHỈ ĐỊNH:
+${styleDescription}
 
 THÔNG TIN QUY CHUẨN ĐỒNG BỘ:
 - Nhóm thời lượng: Phân cảnh ${durationUnit} giây.
@@ -140,51 +153,58 @@ ${charactersInfo}
 ${productInfo}
 
 YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
-1. Tính Nhất Quán Xuyên Suốt: Cốt truyện kịch bản phải có tính kết nối mạch lạc, phong cách nghệ thuật, bối cảnh ánh sáng và diện mạo nhân vật/sản phẩm phải nhất quán từ phân cảnh đầu đến phân cảnh cuối.
+1. Tính Nhất Quán Xuyên Suốt: Cốt truyện kịch bản phải có tính kết nối mạch lạc, phong cách nghệ thuật, bối cảnh ánh sáng và diện mạo nhân vật/sản phẩm phải nhất quán từ phân cảnh đầu đến phân cảnh cuối theo đúng phong cách nghệ thuật đã yêu cầu ở trên.
 2. Quy tắc thời lượng lời thoại (audioPrompt):
    - Cảnh dài ${durationUnit} giây CHỈ được chứa tối đa ${maxWords} từ tiếng Việt trong lời thoại để phát âm vừa vặn, truyền cảm, tự nhiên và không bị hụt hơi.
-   - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khung thời gian ${durationUnit}s. Nếu ý tưởng lời thoại quá dài vượt khung, bạn BẮT BUỘC phải chuyển bớt ý hoặc câu thoại tiếp theo sang phân cảnh tiếp sau.
+   - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khu vực thời gian ${durationUnit}s. Nếu ý tưởng lời thoại quá dài vượt khung, bạn BẮT BUỘC phải chuyển bớt ý hoặc câu thoại tiếp theo sang phân cảnh tiếp sau.
 3. Cú pháp viết Video Visual Prompt (visualPrompt):
    - Viết hoàn toàn bằng TIẾNG ANH chuyên sâu để các mô hình AI tạo video lớn hiểu chính xác.
-   - Phải mô tả chi tiết: Góc quay (e.g. medium shot, extreme close-up), động tác camera (e.g. cinematic slow panning, smooth push-in, tracking shot), ánh sáng (cinematic lighting, warm sunset glow), bối cảnh chính xác và diễn biến hành động.
+   - Phải mô tả chi tiết phù hợp phong cách đã chọn: Góc quay (e.g. medium shot, extreme close-up), động tác camera (e.g. cinematic slow panning, smooth push-in, tracking shot), ánh sáng (cinematic lighting, warm sunset glow), bối cảnh chính xác và diễn biến hành động.
    - Hãy chèn chính xác từ khóa tên nhân vật dạng "@TênNhânVật" cùng các đặc điểm nhận diện ngoại hình đi kèm đã khóa ở trên để AI tạo cảnh có mặt nhân vật chuẩn xác nhất.
    - Thể hiện sản phẩm chi tiết nếu cảnh đó có xuất hiện sản phẩm.
-4. Lời thoại (audioPrompt): Viết bằng TIẾNG VIỆT tự nhiên, súc tích, đắt giá, khớp với hoạt cảnh diễn ra.
-5. Ghi chú phân cảnh (notes): Viết bằng TIẾNG VIỆT về chuyển động, nhịp điệu diễn viên, hoặc âm thanh bối cảnh (SFX, Ambient).`;
+4. Lời thoại (audioPrompt): Viết bằng TIẾNG VIỆT tự nhiên, súc tích, cực kỳ truyền cảm bám sát kịch bản, khớp với hoạt cảnh diễn ra.
+5. Ghi chú phân cảnh (notes): Viết bằng TIẾNG VIỆT về chuyển động, biểu cảm, nhịp điệu diễn xuất hoặc chuyển động của máy quay, âm thanh bối cảnh (SFX, Ambient).`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
       contents: promptText,
       config: {
+        temperature: 0.35, // Slightly lower temperature for deterministic, hyper-fast, correct generation
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              sceneNumber: {
-                type: Type.INTEGER,
-                description: "Thứ tự phân cảnh (bắt đầu từ 1)",
-              },
-              duration: {
-                type: Type.INTEGER,
-                description: `Thời lượng phân cảnh, phải bằng đúng ${durationUnit}`,
-              },
-              visualPrompt: {
-                type: Type.STRING,
-                description: "Detailed video generation prompt in English, incorporating character details with @name and product look-and-feel.",
-              },
-              audioPrompt: {
-                type: Type.STRING,
-                description: `Voiceover narration text in Vietnamese. Max ${maxWords} words to fit ${durationUnit} seconds perfectly!`,
-              },
-              notes: {
-                type: Type.STRING,
-                description: "Production and sound direction notes in Vietnamese.",
+          type: Type.OBJECT,
+          properties: {
+            scenes: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  sceneNumber: {
+                    type: Type.INTEGER,
+                    description: "Thứ tự phân cảnh (bắt đầu từ 1)",
+                  },
+                  duration: {
+                    type: Type.INTEGER,
+                    description: `Thời lượng phân cảnh, phải bằng đúng ${durationUnit}`,
+                  },
+                  visualPrompt: {
+                    type: Type.STRING,
+                    description: "Detailed video generation prompt in English, incorporating character details with @name and product look-and-feel.",
+                  },
+                  audioPrompt: {
+                    type: Type.STRING,
+                    description: `Voiceover narration text in Vietnamese. Max ${maxWords} words to fit ${durationUnit} seconds perfectly!`,
+                  },
+                  notes: {
+                    type: Type.STRING,
+                    description: "Production and sound direction notes in Vietnamese.",
+                  },
+                },
+                required: ["sceneNumber", "duration", "visualPrompt", "audioPrompt", "notes"],
               },
             },
-            required: ["sceneNumber", "duration", "visualPrompt", "audioPrompt", "notes"],
           },
+          required: ["scenes"],
         },
       },
     });
@@ -194,7 +214,8 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
       throw new Error("Empty response received from Gemini.");
     }
 
-    const scenes = JSON.parse(textContent.trim());
+    const parsed = JSON.parse(textContent.trim());
+    const scenes = Array.isArray(parsed) ? parsed : (parsed.scenes || []);
     res.json({ scenes });
   } catch (error: any) {
     console.error("Error generating screenplay:", error);
