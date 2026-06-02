@@ -734,8 +734,7 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
    - Cảnh dài ${scene_duration} giây CHỈ được chứa tối đa ${maxWords} từ tiếng Việt trong lời thoại để phát âm vừa vặn, truyền cảm, tự nhiên và không bị hụt hơi.
    - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khu vực thời gian ${scene_duration}s.
 3. Cú pháp viết Video Visual Prompt (visualPrompt):
-   - Viết hoàn toàn bằng TIẾNG ANH chuyên sâu để các mô hình AI tạo video lớn hiểu chính xác.
-   - Phải mô tả chi tiết phù hợp phong cách đã chọn: Góc quay (e.g. medium shot, extreme close-up), động tác camera (e.g. cinematic slow panning, smooth push-in, tracking shot), ánh sáng (cinematic lighting, warm sunset glow), bối cảnh chính xác và diễn biến hành động.
+   - Viết hoàn toàn bằng TIẾNG VIỆT chuyên sâu, chi tiết, mô tả rõ góc quay, chuyển động camera, ánh sáng, hành động của nhân vật cùng sản phẩm để người dùng dễ dàng theo dõi và sử dụng.
    - Hãy chèn chính xác từ khóa tên nhân vật dạng "@TênNhânVật" cùng các đặc điểm nhận diện ngoại hình đi kèm đã khóa ở trên để AI tạo cảnh có mặt nhân vật chuẩn xác nhất.
    - Thể hiện sản phẩm chi tiết nếu cảnh đó có xuất hiện sản phẩm.
 4. Lời thoại (audioPrompt): Viết bằng TIẾNG VIỆT tự nhiên, súc tích, cực kỳ truyền cảm bám sát kịch bản, khớp với hoạt cảnh diễn ra.
@@ -759,7 +758,7 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
                   },
                   visualPrompt: {
                     type: "STRING",
-                    description: "Detailed video generation prompt in English, incorporating character details with @name and product look-and-feel.",
+                    description: "Detailed video generation prompt in Vietnamese, incorporating character details with @name and product look-and-feel.",
                   },
                   audioPrompt: {
                     type: "STRING",
@@ -889,7 +888,7 @@ YÊU CẦU ĐẶC BIỆT TỪ NGƯỜI DÙNG CHO PHÂN CẢNH SỐ ${sceneNum}:
 
 HÃY TẠO LẠI PHÂN CẢNH SỐ ${sceneNum} NÀY để đáp ứng mong muốn trên nhưng VẪN PHẢI GIỮ TÍNH MẠCH LẠC, NHẤT QUÁN kết cấu chung của toàn bộ kịch bản.
 Đảm bảo lời thoại tiếng Việt (audioPrompt) cực kỳ ngắn gọn, sắc sảo và KHÔNG vượt quá ${maxWords} từ để vừa khít thời lượng ${scene_duration}s.
-Visual prompt cho video phải viết bằng tiếng Anh chi tiết cao (khoảng 100 từ).`;
+Visual prompt cho video phải viết bằng tiếng Việt chi tiết cao (khoảng 100 từ).`;
 
         const schema = {
           type: "OBJECT",
@@ -902,7 +901,7 @@ Visual prompt cho video phải viết bằng tiếng Anh chi tiết cao (khoản
             },
             visualPrompt: {
               type: "STRING",
-              description: "Detailed video generation prompt in English, incorporating character details with @name and product look-and-feel.",
+              description: "Detailed video generation prompt in Vietnamese, incorporating character details with @name and product look-and-feel.",
             },
             audioPrompt: {
               type: "STRING",
@@ -2039,7 +2038,7 @@ Sản xuất bởi STUDIO-TRIET.
                             </div>
                             <p className="text-[10px] text-emerald-800 font-bold leading-tight flex items-center gap-1">
                               <span>💡</span>
-                              <span>Mẹo: Prompt này tự động chứa cả đặc tả khung hình tiếng Anh và nhãn lời thoại lồng tiếng giúp AI tạo video khớp đồng bộ hoàn hảo!</span>
+                              <span>Mẹo: Prompt này tự động chứa cả đặc tả khung hình tiếng Việt chi tiết và lời thoại lồng tiếng giúp AI tạo video khớp đồng bộ hoàn hảo!</span>
                             </p>
                           </div>
 
