@@ -129,10 +129,12 @@ app.post("/api/generate-screenplay", async (req, res) => {
       return res.status(400).json({ error: "Missing required screenplay parameters" });
     }
 
-    const durationUnit = durationGroup === "10s" ? 10 : 8;
-    const numScenes = Math.ceil(totalDuration / durationUnit);
-    // 1s points about 2.2 words in Vietnamese. So 8s matches ~18 words, 10s matches ~22 words.
-    const maxWords = durationUnit === 10 ? 25 : 18;
+    const durationUnit = durationGroup === "8s" ? 8 : (durationGroup === "10s" ? 10 : (durationGroup === "15s" ? 15 : 30));
+    const isSingleSceneGroup = durationGroup === "15s" || durationGroup === "30s";
+    const numScenes = isSingleSceneGroup ? 1 : Math.ceil(totalDuration / durationUnit);
+    const scene_duration = isSingleSceneGroup ? totalDuration : durationUnit;
+    // 1s translates to about 2.2 words in Vietnamese.
+    const maxWords = isSingleSceneGroup ? Math.ceil(totalDuration * 2.2) : (durationUnit === 8 ? 18 : 25);
 
     const ai = getGenAI();
 
@@ -166,7 +168,7 @@ app.post("/api/generate-screenplay", async (req, res) => {
     }
 
     const promptText = `Bạn là một biên kịch danh tiếng và kỹ sư thiết kế prompt (prompt engineer) video chuyên nghiệp dạn dày kinh nghiệm tại STUDIO-TRIET.
-Nhiệm vụ của bạn là chuyển thể Ý tưởng kịch bản (Idea) dưới đây thành một kịch bản video từng phân cảnh đồng bộ, tối ưu thời lượng và nhất quán về nhân vật lẫn sản phẩm.
+Nhiệm vụ của bạn là chuyển thể Ý tưởng kịch bản (Idea) dưới đây thành một kịch bản video đồng bộ, tối ưu thời lượng và nhất quán về nhân vật lẫn sản phẩm.
 
 Ý TƯỞNG KỊCH BẢN CHỦ ĐẠO:
 "${idea}"
@@ -175,19 +177,19 @@ YÊU CẦU PHONG CÁCH NGHỆ THUẬT CHỈ ĐỊNH:
 ${styleDescription}
 
 THÔNG TIN QUY CHUẨN ĐỒNG BỘ:
-- Nhóm thời lượng: Phân cảnh ${durationUnit} giây.
+- Nhóm thời lượng: Phân cảnh ${scene_duration} giây.
 - Tổng thời lượng video: ${totalDuration} giây.
-- Tổng số phân cảnh cần tạo: ${numScenes} phân cảnh (Mỗi cảnh dài đúng ${durationUnit}s để tổng đạt ${totalDuration}s).
+- Tổng số phân cảnh cần tạo: ${numScenes} phân cảnh ${isSingleSceneGroup ? `(Tạo duy nhất 1 kịch bản/prompt tổng thể hoàn chỉnh dài đúng ${totalDuration}s, tuyệt đối không chia nhỏ ra nhiều phân cảnh)` : `(Mỗi cảnh dài đúng ${durationUnit}s để tổng đạt ${totalDuration}s)`}.
 - Nhân vật tham chiếu cần sử dụng (nếu phù hợp):
 ${charactersInfo}
 - Sản phẩm quảng cáo cần sử dụng (nếu phù hợp):
 ${productInfo}
 
 YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
-1. Tính Nhất Quán Xuyên Suốt: Cốt truyện kịch bản phải có tính kết nối mạch lạc, phong cách nghệ thuật, bối cảnh ánh sáng và diện mạo nhân vật/sản phẩm phải nhất quán từ phân cảnh đầu đến phân cảnh cuối theo đúng phong cách nghệ thuật đã yêu cầu ở trên.
+1. Tính Nhất Quán Xuyên Suốt: Cốt truyện kịch bản phải có tính kết nối mạch lạc, phong cách nghệ thuật, bối cảnh ánh sáng và diện mạo nhân vật/sản phẩm phải nhất quán theo phong cách nghệ thuật đã yêu cầu ở trên.
 2. Quy tắc thời lượng lời thoại (audioPrompt):
-   - Cảnh dài ${durationUnit} giây CHỈ được chứa tối đa ${maxWords} từ tiếng Việt trong lời thoại để phát âm vừa vặn, truyền cảm, tự nhiên và không bị hụt hơi.
-   - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khu vực thời gian ${durationUnit}s. Nếu ý tưởng lời thoại quá dài vượt khung, bạn BẮT BUỘC phải chuyển bớt ý hoặc câu thoại tiếp theo sang phân cảnh tiếp sau.
+   - Cảnh dài ${scene_duration} giây CHỈ được chứa tối đa ${maxWords} từ tiếng Việt trong lời thoại để phát âm vừa vặn, truyền cảm, tự nhiên và không bị hụt hơi.
+   - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khu vực thời gian ${scene_duration}s.
 3. Cú pháp viết Video Visual Prompt (visualPrompt):
    - Viết hoàn toàn bằng TIẾNG ANH chuyên sâu để các mô hình AI tạo video lớn hiểu chính xác.
    - Phải mô tả chi tiết phù hợp phong cách đã chọn: Góc quay (e.g. medium shot, extreme close-up), động tác camera (e.g. cinematic slow panning, smooth push-in, tracking shot), ánh sáng (cinematic lighting, warm sunset glow), bối cảnh chính xác và diễn biến hành động.
@@ -216,7 +218,7 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
                   },
                   duration: {
                     type: Type.INTEGER,
-                    description: `Thời lượng phân cảnh, phải bằng đúng ${durationUnit}`,
+                    description: `Thời lượng phân cảnh, phải bằng đúng ${scene_duration}`,
                   },
                   visualPrompt: {
                     type: Type.STRING,
@@ -224,7 +226,7 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
                   },
                   audioPrompt: {
                     type: Type.STRING,
-                    description: `Voiceover narration text in Vietnamese. Max ${maxWords} words to fit ${durationUnit} seconds perfectly!`,
+                    description: `Voiceover narration text in Vietnamese. Max ${maxWords} words to fit ${scene_duration} seconds perfectly!`,
                   },
                   notes: {
                     type: Type.STRING,
@@ -263,7 +265,7 @@ app.post("/api/regenerate-scene", async (req, res) => {
     }
 
     const ai = getGenAI();
-    const maxWords = durationUnit === 10 ? 25 : 18;
+    const maxWords = durationUnit === 8 ? 18 : (durationUnit === 10 ? 25 : (durationUnit === 15 ? 35 : 70));
 
     // Characters formatting
     let charactersInfo = "";

@@ -56,7 +56,7 @@ export default function App() {
 
   // Screenplay Setup State
   const [idea, setIdea] = useState("");
-  const [durationGroup, setDurationGroup] = useState<"10s" | "8s">("10s");
+  const [durationGroup, setDurationGroup] = useState<"10s" | "8s" | "15s" | "30s">("10s");
   const [totalDuration, setTotalDuration] = useState<number>(20); // Default to 20s for 10s group
   const [screenplayStyle, setScreenplayStyle] = useState<"cinematic" | "daily" | "commercial">("cinematic");
 
@@ -415,12 +415,16 @@ export default function App() {
   };
 
   // Handler for duration group switch
-  const handleDurationGroupChange = (group: "10s" | "8s") => {
+  const handleDurationGroupChange = (group: "10s" | "8s" | "15s" | "30s") => {
     setDurationGroup(group);
     if (group === "10s") {
       setTotalDuration(20); // Recommended starting for 10s
-    } else {
+    } else if (group === "8s") {
       setTotalDuration(24); // Recommended starting for 8s
+    } else if (group === "15s") {
+      setTotalDuration(30); // Recommended starting for 15s
+    } else if (group === "30s") {
+      setTotalDuration(30); // Recommended starting for 30s
     }
   };
 
@@ -673,9 +677,11 @@ export default function App() {
 
     try {
       let scenesData: any[] = [];
-      const durationUnit = durationGroup === "10s" ? 10 : 8;
-      const numScenes = Math.ceil(totalDuration / durationUnit);
-      const maxWords = durationUnit === 10 ? 25 : 18;
+      const durationUnit = durationGroup === "8s" ? 8 : (durationGroup === "10s" ? 10 : (durationGroup === "15s" ? 15 : 30));
+      const isSingleSceneGroup = durationGroup === "15s" || durationGroup === "30s";
+      const numScenes = isSingleSceneGroup ? 1 : Math.ceil(totalDuration / durationUnit);
+      const scene_duration = isSingleSceneGroup ? totalDuration : durationUnit;
+      const maxWords = isSingleSceneGroup ? Math.ceil(totalDuration * 2.2) : (durationUnit === 8 ? 18 : 25);
 
       if (useDirectGemini) {
         let styleDescription = "PHONG CÁCH MẶC ĐỊNH: Đa dạng, linh hoạt và cân bằng giữa nghệ thuật lẫn thương mại.";
@@ -705,7 +711,7 @@ export default function App() {
         }
 
         const promptText = `Bạn là một biên kịch danh tiếng và kỹ sư thiết kế prompt (prompt engineer) video chuyên nghiệp dạn dày kinh nghiệm tại STUDIO-TRIET.
-Nhiệm vụ của bạn là chuyển thể Ý tưởng kịch bản (Idea) dưới đây thành một kịch bản video từng phân cảnh đồng bộ, tối ưu thời lượng và nhất quán về nhân vật lẫn sản phẩm.
+Nhiệm vụ của bạn là chuyển thể Ý tưởng kịch bản (Idea) dưới đây thành một kịch bản video đồng bộ, tối ưu thời lượng và nhất quán về nhân vật lẫn sản phẩm.
 
 Ý TƯỞNG KỊCH BẢN CHỦ ĐẠO:
 "${idea}"
@@ -714,19 +720,19 @@ YÊU CẦU PHONG CÁCH NGHỆ THUẬT CHỈ ĐỊNH:
 ${styleDescription}
 
 THÔNG TIN QUY CHUẨN ĐỒNG BỘ:
-- Nhóm thời lượng: Phân cảnh ${durationUnit} giây.
+- Nhóm thời lượng: Phân cảnh ${scene_duration} giây.
 - Tổng thời lượng video: ${totalDuration} giây.
-- Tổng số phân cảnh cần tạo: ${numScenes} phân cảnh (Mỗi cảnh dài đúng ${durationUnit}s để tổng đạt ${totalDuration}s).
+- Tổng số phân cảnh cần tạo: ${numScenes} phân cảnh ${isSingleSceneGroup ? `(Tạo duy nhất 1 kịch bản/prompt tổng thể hoàn chỉnh dài đúng ${totalDuration}s, tuyệt đối không chia nhỏ ra nhiều phân cảnh)` : `(Mỗi cảnh dài đúng ${durationUnit}s để tổng đạt ${totalDuration}s)`}.
 - Nhân vật tham chiếu cần sử dụng (nếu phù hợp):
 ${charactersInfo}
 - Sản phẩm quảng cáo cần sử dụng (nếu phù hợp):
 ${productInfo}
 
 YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
-1. Tính Nhất Quán Xuyên Suốt: Cốt truyện kịch bản phải có tính kết nối mạch lạc, phong cách nghệ thuật, bối cảnh ánh sáng và diện mạo nhân vật/sản phẩm phải nhất quán từ phân cảnh đầu đến phân cảnh cuối theo đúng phong cách nghệ thuật đã yêu cầu ở trên.
+1. Tính Nhất Quán Xuyên Suốt: Cốt truyện kịch bản phải có tính kết nối mạch lạc, phong cách nghệ thuật, bối cảnh ánh sáng và diện mạo nhân vật/sản phẩm phải nhất quán theo phong cách nghệ thuật đã yêu cầu ở trên.
 2. Quy tắc thời lượng lời thoại (audioPrompt):
-   - Cảnh dài ${durationUnit} giây CHỈ được chứa tối đa ${maxWords} từ tiếng Việt trong lời thoại để phát âm vừa vặn, truyền cảm, tự nhiên và không bị hụt hơi.
-   - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khu vực thời gian ${durationUnit}s. Nếu ý tưởng lời thoại quá dài vượt khung, bạn BẮT BUỘC phải chuyển bớt ý hoặc câu thoại tiếp theo sang phân cảnh tiếp sau.
+   - Cảnh dài ${scene_duration} giây CHỈ được chứa tối đa ${maxWords} từ tiếng Việt trong lời thoại để phát âm vừa vặn, truyền cảm, tự nhiên và không bị hụt hơi.
+   - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khu vực thời gian ${scene_duration}s.
 3. Cú pháp viết Video Visual Prompt (visualPrompt):
    - Viết hoàn toàn bằng TIẾNG ANH chuyên sâu để các mô hình AI tạo video lớn hiểu chính xác.
    - Phải mô tả chi tiết phù hợp phong cách đã chọn: Góc quay (e.g. medium shot, extreme close-up), động tác camera (e.g. cinematic slow panning, smooth push-in, tracking shot), ánh sáng (cinematic lighting, warm sunset glow), bối cảnh chính xác và diễn biến hành động.
@@ -749,7 +755,7 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
                   },
                   duration: {
                     type: "INTEGER",
-                    description: `Thời lượng phân cảnh, phải bằng đúng ${durationUnit}`,
+                    description: `Thời lượng phân cảnh, phải bằng đúng ${scene_duration}`,
                   },
                   visualPrompt: {
                     type: "STRING",
@@ -757,7 +763,7 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
                   },
                   audioPrompt: {
                     type: "STRING",
-                    description: `Voiceover narration text in Vietnamese. Max ${maxWords} words to fit ${durationUnit} seconds perfectly!`,
+                    description: `Voiceover narration text in Vietnamese. Max ${maxWords} words to fit ${scene_duration} seconds perfectly!`,
                   },
                   notes: {
                     type: "STRING",
@@ -844,12 +850,13 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
     showNotification(`Đang tái khởi tạo phối cảnh và lời thoại cho phân cảnh #${sceneNum}...`, "info");
 
     try {
-      const durationUnit = durationGroup === "10s" ? 10 : 8;
+      const currentScene = screenplay.scenes.find(s => s.sceneNumber === sceneNum);
+      const scene_duration = currentScene ? currentScene.duration : (durationGroup === "8s" ? 8 : (durationGroup === "10s" ? 10 : (durationGroup === "15s" ? 15 : 30)));
+      const isSingleSceneGroup = durationGroup === "15s" || durationGroup === "30s";
+      const maxWords = isSingleSceneGroup ? Math.ceil(scene_duration * 2.2) : (durationGroup === "8s" ? 18 : 25);
       let updatedScene: ScreenplayScene;
 
       if (useDirectGemini) {
-        const maxWords = durationUnit === 10 ? 25 : 18;
-
         // Characters formatting
         let charactersInfo = "";
         if (characters && characters.length > 0) {
@@ -881,7 +888,7 @@ YÊU CẦU ĐẶC BIỆT TỪ NGƯỜI DÙNG CHO PHÂN CẢNH SỐ ${sceneNum}:
 "${feedbackText}"
 
 HÃY TẠO LẠI PHÂN CẢNH SỐ ${sceneNum} NÀY để đáp ứng mong muốn trên nhưng VẪN PHẢI GIỮ TÍNH MẠCH LẠC, NHẤT QUÁN kết cấu chung của toàn bộ kịch bản.
-Đảm bảo lời thoại tiếng Việt (audioPrompt) cực kỳ ngắn gọn, sắc sảo và KHÔNG vượt quá ${maxWords} từ để vừa khít thời lượng ${durationUnit}s.
+Đảm bảo lời thoại tiếng Việt (audioPrompt) cực kỳ ngắn gọn, sắc sảo và KHÔNG vượt quá ${maxWords} từ để vừa khít thời lượng ${scene_duration}s.
 Visual prompt cho video phải viết bằng tiếng Anh chi tiết cao (khoảng 100 từ).`;
 
         const schema = {
@@ -919,7 +926,7 @@ Visual prompt cho video phải viết bằng tiếng Anh chi tiết cao (khoản
               idea: screenplay.idea,
               characters: characters,
               product: product,
-              durationUnit: durationUnit,
+              durationUnit: scene_duration,
               currentScenes: screenplay.scenes,
               targetSceneNumber: sceneNum,
               feedback: feedbackText
@@ -1016,7 +1023,7 @@ ${scene.notes}`;
 =====================================================
 Ý TƯỞNG CHỦ ĐẶO: ${screenplay.idea}
 TỔNG THỜI LƯỢNG SẢN XUẤT: ${screenplay.totalDuration} Giây
-CHẾ ĐỘ TỐI ƯU HỎA: Cảnh quay ${screenplay.durationGroup === "10s" ? 10 : 8} giây
+CHẾ ĐỘ TỐI ƯU HỎA: Cảnh quay ${parseInt(screenplay.durationGroup) || 10} giây
 NGÀY KHỞI TẠO: ${screenplay.createdAt}
 
 `;
@@ -1696,35 +1703,59 @@ Sản xuất bởi STUDIO-TRIET.
               {/* Configuration Panel: Duration intervals & total duration */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-xl bg-stone-50 border border-stone-200">
                 
-                {/* Group 1 & 2 Selector */}
+                {/* Group Selector */}
                 <div className="space-y-3">
                   <span className="text-[11px] font-extrabold text-stone-500 uppercase tracking-widest block">
                     1. Nhóm thời lượng cốt lõi
                   </span>
                   
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <button
                       onClick={() => handleDurationGroupChange("10s")}
-                      className={`py-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                      className={`py-2 px-1 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
                         durationGroup === "10s"
                           ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm font-black ring-1 ring-emerald-250"
                           : "bg-white border-stone-200 text-stone-500 hover:text-stone-850"
                       }`}
                     >
-                      <span className="text-sm">Nhóm 1</span>
-                      <span className="text-[9.5px] font-mono text-stone-400 font-bold mt-0.5">Mỗi phân cảnh 10s</span>
+                      <span className="text-xs sm:text-sm">Nhóm 1</span>
+                      <span className="text-[9px] font-mono text-stone-400 font-bold mt-0.5">Phân cảnh 10s</span>
                     </button>
 
                     <button
                       onClick={() => handleDurationGroupChange("8s")}
-                      className={`py-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                      className={`py-2 px-1 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
                         durationGroup === "8s"
                           ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm font-black ring-1 ring-emerald-250"
                           : "bg-white border-stone-200 text-stone-500 hover:text-stone-850"
                       }`}
                     >
-                      <span className="text-sm">Nhóm 2</span>
-                      <span className="text-[9.5px] font-mono text-stone-400 font-bold mt-0.5">Mỗi phân cảnh 8s</span>
+                      <span className="text-xs sm:text-sm">Nhóm 2</span>
+                      <span className="text-[9px] font-mono text-stone-400 font-bold mt-0.5">Phân cảnh 8s</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDurationGroupChange("15s")}
+                      className={`py-2 px-1 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                        durationGroup === "15s"
+                          ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm font-black ring-1 ring-emerald-250"
+                          : "bg-white border-stone-200 text-stone-500 hover:text-stone-850"
+                      }`}
+                    >
+                      <span className="text-xs sm:text-sm">Nhóm 3</span>
+                      <span className="text-[9px] font-mono text-stone-400 font-bold mt-0.5">Phân cảnh 15s</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleDurationGroupChange("30s")}
+                      className={`py-2 px-1 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
+                        durationGroup === "30s"
+                          ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm font-black ring-1 ring-emerald-250"
+                          : "bg-white border-stone-200 text-stone-500 hover:text-stone-850"
+                      }`}
+                    >
+                      <span className="text-xs sm:text-sm">Nhóm 4</span>
+                      <span className="text-[9px] font-mono text-stone-400 font-bold mt-0.5">Phân cảnh 30s</span>
                     </button>
                   </div>
                 </div>
@@ -1736,39 +1767,29 @@ Sản xuất bởi STUDIO-TRIET.
                   </span>
                   
                   <div className="grid grid-cols-4 gap-1.5">
-                    {durationGroup === "10s" ? (
-                      <>
-                        {[10, 20, 30, 40].map((t) => (
-                          <button
-                            key={t}
-                            onClick={() => setTotalDuration(t)}
-                            className={`py-2 rounded-md text-xs font-mono font-bold transition-all cursor-pointer border ${
-                              totalDuration === t
-                                ? "bg-emerald-600 border-emerald-600 text-white font-black"
-                                : "bg-white hover:bg-stone-50 border-stone-200 text-stone-700 shadow-sm"
-                            }`}
-                          >
-                            {t}s
-                          </button>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        {[8, 24, 32, 40].map((t) => (
-                          <button
-                            key={t}
-                            onClick={() => setTotalDuration(t)}
-                            className={`py-2 rounded-md text-xs font-mono font-bold transition-all cursor-pointer border ${
-                              totalDuration === t
-                                ? "bg-emerald-600 border-emerald-600 text-white font-black"
-                                : "bg-white hover:bg-stone-50 border-stone-200 text-stone-700 shadow-sm"
-                            }`}
-                          >
-                            {t}s
-                          </button>
-                        ))}
-                      </>
-                    )}
+                    {(() => {
+                      let durations = [10, 20, 30, 40];
+                      if (durationGroup === "8s") {
+                        durations = [8, 24, 32, 40];
+                      } else if (durationGroup === "15s") {
+                        durations = [15, 30, 45, 60];
+                      } else if (durationGroup === "30s") {
+                        durations = [30, 60, 90, 120];
+                      }
+                      return durations.map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setTotalDuration(t)}
+                          className={`py-2 rounded-md text-xs font-mono font-bold transition-all cursor-pointer border ${
+                            totalDuration === t
+                              ? "bg-emerald-600 border-emerald-600 text-white font-black"
+                              : "bg-white hover:bg-stone-50 border-stone-200 text-stone-700 shadow-sm"
+                          }`}
+                        >
+                          {t}s
+                        </button>
+                      ));
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1783,7 +1804,11 @@ Sản xuất bởi STUDIO-TRIET.
                 </div>
                 <div className="text-right">
                   <span className="px-2 py-1 rounded bg-white text-xs font-black border border-stone-200 text-emerald-600 shadow-sm">
-                    Phân chia thành: {Math.ceil(totalDuration / (durationGroup === "10s" ? 10 : 8))} cảnh ({durationGroup === "10s" ? "10s" : "8s"}/cảnh)
+                    {durationGroup === "15s" || durationGroup === "30s" ? (
+                      "Không chia nhỏ - Tạo 1 Prompt gộp duy nhất"
+                    ) : (
+                      `Phân chia thành: ${Math.ceil(totalDuration / (durationGroup === "8s" ? 8 : 10))} cảnh (${durationGroup}/cảnh)`
+                    )}
                   </span>
                 </div>
               </div>
@@ -1840,7 +1865,7 @@ Sản xuất bởi STUDIO-TRIET.
                   </div>
                   <div className={`flex items-center gap-2 ${genStep >= 4 ? "text-emerald-700 font-bold" : "text-stone-400 font-semibold"}`}>
                     <span className="shrink-0">{genStep >= 4 ? "✓" : "○"}</span>
-                    <span>Tối ưu từ ngữ lời thoại khớp thời gian ({durationGroup === "10s" ? "~22" : "~18"} từ)</span>
+                    <span>Tối ưu từ ngữ lời thoại khớp thời gian ({durationGroup === "8s" ? "~18" : (durationGroup === "10s" ? "~25" : (durationGroup === "15s" ? "~35" : "~70"))} từ)</span>
                   </div>
                 </div>
               </motion.div>
@@ -1881,8 +1906,7 @@ Sản xuất bởi STUDIO-TRIET.
                 <div className="space-y-6">
                   {screenplay.scenes.map((scene, idx) => {
                     const sceneWordCount = getWordCount(scene.audioPrompt);
-                    const isGroup10 = durationGroup === "10s";
-                    const maxWordsAllowed = isGroup10 ? 25 : 18;
+                    const maxWordsAllowed = durationGroup === "8s" ? 18 : (durationGroup === "10s" ? 25 : (durationGroup === "15s" ? 35 : 70));
                     const isOverflow = sceneWordCount > maxWordsAllowed;
 
                     return (

@@ -30,7 +30,7 @@ export interface Screenplay {
   id: string;
   idea: string;
   totalDuration: number; // e.g., 8, 20, 24, 30, 32, 40
-  durationGroup: '10s' | '8s';
+  durationGroup: '10s' | '8s' | '15s' | '30s';
   scenes: ScreenplayScene[];
   createdAt: string;
 }
