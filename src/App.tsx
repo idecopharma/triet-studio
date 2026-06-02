@@ -278,18 +278,37 @@ export default function App() {
     }
 
     const responseText = await response.text();
+    const trimmedText = responseText.trim();
+
+    if (!trimmedText) {
+      throw new Error(
+        "LỖI LƯU TRỮ TĨNH (Netlify/Vercel):\n\n" +
+        "Phản hồi từ máy chủ hoàn toàn trống rỗng.\n" +
+        "Do Netlify là dịch vụ lưu trữ trang web tĩnh (Static Web Hosting), hệ thống không thể khởi động Máy chủ Node.js (My API Server) chứa các chức năng phân tích & kết nối Gemini siêu bảo mật.\n\n" +
+        "👉 Giải pháp: Vui lòng hãy sử dụng liên kết 'Development App' hoặc 'Shared App' được hệ thống Google AI Studio cấp sẵn phía trên (được triển khai trên Google Cloud Run đầy đủ máy chủ Node.js) để chạy mượt mà tất cả các tính năng!"
+      );
+    }
+
     let data: any;
     try {
-      data = JSON.parse(responseText);
+      data = JSON.parse(trimmedText);
     } catch (jsonErr: any) {
-      const trimmedText = responseText.trim();
-      const isHtml = trimmedText.startsWith("<") || trimmedText.toLowerCase().includes("<!doctype");
+      const isHtml = trimmedText.startsWith("<") || trimmedText.toLowerCase().includes("<!doctype") || trimmedText.toLowerCase().includes("<html>");
       if (isHtml) {
         throw new Error(
-          "LỖI TƯƠNG THÍCH MÔI TRƯỜNG (Netlify/Vercel/Static Host):\n\nPhát hiện máy chủ đang được lưu trữ tĩnh và đã trả về nội dung HTML thay vì dữ liệu JSON của API máy chủ.\n\nHướng dẫn giải quyết: Vui lòng hãy sử dụng liên kết của ứng dụng chạy trên Google Cloud Run của hệ thống AI Studio ban đầu để chạy với máy chủ NodeJS tích hợp đầy đủ!"
+          "LỖI TƯƠNG THÍCH MÔI TRƯỜNG TĨNH (Netlify/Vercel):\n\n" +
+          "Hệ thống nhận diện bạn đang tải ứng dụng từ một nền tảng lưu trữ tĩnh của Netlify. Các truy vấn đến máy chủ (/api/*) đã bị chuyển hướng hoặc trả về trang HTML tĩnh dự phòng thay vì dữ liệu JSON.\n\n" +
+          "👉 Hướng dẫn khắc phục:\n" +
+          "1. Hãy chạy ứng dụng trên liên kết Cloud Run được cấp ở mục 'Development App URL' or 'Shared App URL' ở cấu hình Google AI Studio.\n" +
+          "2. Chỉ sử dụng Cloud Run hoặc Heroku/Render hỗ trợ chạy mã server Node.js khi bạn muốn tự triển khai ứng dụng này lên Internet."
         );
       } else {
-        throw new Error("Lỗi chuyển đổi dữ liệu máy chủ: " + jsonErr.message);
+        throw new Error(
+          "LỖI KHÔNG TƯƠNG THÍCH BACKEND (Netlify/Vercel):\n\n" +
+          "Không thể phân tích phản hồi dữ liệu (Lỗi: " + jsonErr.message + ").\n" +
+          "Môi trường hiện tại không có máy chủ Node.js hoạt động để chạy dịch vụ API Gemini an toàn.\n\n" +
+          "👉 Khuyên dùng: Sử dụng đường dẫn demo trực tiếp trên Cloud Run từ Google AI Studio!"
+        );
       }
     }
 
@@ -1173,6 +1192,22 @@ Sản xuất bởi STUDIO-TRIET.
                     <RefreshCw className="w-3 h-3 text-stone-600" />
                     Xóa nói lại
                   </button>
+                </div>
+
+                {/* Microphone Help & Permission Guide */}
+                <div className="mt-3.5 p-3.5 bg-amber-50/70 rounded-xl border border-amber-150 space-y-1.5 shadow-inner">
+                  <div className="flex gap-2 text-amber-800">
+                    <span className="text-amber-600">💡</span>
+                    <span className="text-xs font-bold uppercase tracking-wider">Hướng dẫn Quyền ghi âm & Khắc phục Android:</span>
+                  </div>
+                  <ul className="text-[11.5px] text-amber-900 list-disc ml-5 space-y-1 leading-relaxed font-semibold">
+                    <li>
+                      <strong className="text-amber-900">Nếu micro báo lỗi phân quyền trong Google AI Studio:</strong> Trình duyệt chặn quyền truy cập thiết bị nhạy cảm khi hiển thị bên trong khung Iframe. <span className="text-emerald-700 underline font-extrabold cursor-pointer">Hãy bấm vào biểu tượng "Mở ứng dụng hoặc link trong tab mới" (Open in a new tab)</span> ở thanh công cụ phía trên bên phải của AI Studio để xin quyền Micro hợp lệ.
+                    </li>
+                    <li>
+                      <strong className="text-amber-900">Tính năng nhận diện Android:</strong> Hệ thống đã được lập trình thuật toán so sánh phân đoạn động (Dynamic Overlap Filter) để lọc bỏ tự động các từ khóa bị lặp lại nhiều lần do trễ hệ thống trên thiết bị Android, mang lại văn bản mượt mà, chân thực.
+                    </li>
+                  </ul>
                 </div>
               </div>
 
