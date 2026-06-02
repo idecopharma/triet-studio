@@ -60,6 +60,7 @@ export default function App() {
   // Speech Recognition State
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const initialIdeaRef = useRef("");
 
   // Generation & Workspace State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -121,17 +122,22 @@ export default function App() {
 
       rec.onresult = (event: any) => {
         let finalTranscript = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript + " ";
+        let interimTranscript = "";
+        for (let i = 0; i < event.results.length; ++i) {
+          const result = event.results[i];
+          if (!result) continue;
+          const text = result[0]?.transcript || "";
+          if (result.isFinal) {
+            finalTranscript += text + " ";
+          } else {
+            interimTranscript += text;
           }
         }
-        if (finalTranscript) {
-          setIdea(prev => {
-            const trimmed = prev.trim();
-            return trimmed ? trimmed + " " + finalTranscript.trim() : finalTranscript.trim();
-          });
-        }
+        
+        const base = initialIdeaRef.current.trim();
+        const speech = (finalTranscript + interimTranscript).trim();
+        const fullText = base ? base + " " + speech : speech;
+        setIdea(fullText);
       };
 
       rec.onerror = (event: any) => {
@@ -158,6 +164,7 @@ export default function App() {
       return;
     }
     try {
+      initialIdeaRef.current = idea;
       recognitionRef.current.start();
       showNotification("Đang mở micro... Vui lòng nói ý tưởng kịch bản bằng tiếng Việt.", "info");
     } catch (err) {
@@ -174,12 +181,14 @@ export default function App() {
 
   const clearAndRestartListening = () => {
     setIdea("");
+    initialIdeaRef.current = "";
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
       } catch (e) {}
       setTimeout(() => {
         try {
+          initialIdeaRef.current = "";
           recognitionRef.current.start();
           showNotification("Đã dọn dẹp và bắt đầu lắng nghe mới...", "info");
         } catch (err) {
@@ -197,6 +206,37 @@ export default function App() {
     setTimeout(() => {
       setAlertMsg(prev => prev?.text === text ? null : prev);
     }, 4500);
+  };
+
+  // Utility safe fetch with friendly system feedback for static hosting providers like Netlify/Vercel
+  const safeFetchJson = async (url: string, options: RequestInit) => {
+    let response;
+    try {
+      response = await fetch(url, options);
+    } catch (fetchErr: any) {
+      throw new Error("Không thể kết nối đến máy chủ. Hãy kiểm tra kết nối mạng của bạn: " + fetchErr.message);
+    }
+
+    const responseText = await response.text();
+    let data: any;
+    try {
+      data = JSON.parse(responseText);
+    } catch (jsonErr: any) {
+      const trimmedText = responseText.trim();
+      const isHtml = trimmedText.startsWith("<") || trimmedText.toLowerCase().includes("<!doctype");
+      if (isHtml) {
+        throw new Error(
+          "LỖI TƯƠNG THÍCH MÔI TRƯỜNG (Netlify/Vercel/Static Host):\n\nPhát hiện máy chủ đang được lưu trữ tĩnh và đã trả về nội dung HTML thay vì dữ liệu JSON của API máy chủ.\n\nHướng dẫn giải quyết: Vui lòng hãy sử dụng liên kết của ứng dụng chạy trên Google Cloud Run của hệ thống AI Studio ban đầu để chạy với máy chủ NodeJS tích hợp đầy đủ!"
+        );
+      } else {
+        throw new Error("Lỗi chuyển đổi dữ liệu máy chủ: " + jsonErr.message);
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(data.error || `Mã phản hồi lỗi từ Server (HTTP ${response.status})`);
+    }
+    return data;
   };
 
   // Handler for duration group switch
@@ -325,7 +365,7 @@ export default function App() {
     showNotification("Đang phân tích nhân diện và phong cách áo quần bằng AI...", "info");
 
     try {
-      const response = await fetch("/api/analyze-character", {
+      const data = await safeFetchJson("/api/analyze-character", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -333,9 +373,6 @@ export default function App() {
           outfits: charOutfit
         })
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gặp lỗi khi phân tích nhân khẩu học nhân vật.");
 
       const newChar: Character = {
         id: "char-" + Date.now(),
@@ -375,16 +412,13 @@ export default function App() {
     showNotification("Đang soi chiếu nhãn hàng, văn tự và bố cục sản phẩm...", "info");
 
     try {
-      const response = await fetch("/api/analyze-product", {
+      const data = await safeFetchJson("/api/analyze-product", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: prodName
         })
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Phân tích sản phẩm gặp sự cố ngoại vi.");
 
       const newProd: Product = {
         name: prodName,
@@ -431,7 +465,7 @@ export default function App() {
     const timer3 = setTimeout(() => setGenStep(4), 7500);
 
     try {
-      const response = await fetch("/api/generate-screenplay", {
+      const data = await safeFetchJson("/api/generate-screenplay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -443,9 +477,6 @@ export default function App() {
           style: screenplayStyle
         })
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Không viết được kịch bản hoàn chỉnh.");
 
       const newScreenplay: Screenplay = {
         id: "sc-" + Date.now(),
@@ -494,7 +525,7 @@ export default function App() {
 
     try {
       const durationUnit = durationGroup === "10s" ? 10 : 8;
-      const response = await fetch("/api/regenerate-scene", {
+      const data = await safeFetchJson("/api/regenerate-scene", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -507,9 +538,6 @@ export default function App() {
           feedback: feedbackText
         })
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gặp sự cố khi thiết kế lại cảnh quay.");
 
       const updatedScene: ScreenplayScene = data.updatedScene;
 
