@@ -67,6 +67,81 @@ export default function App() {
   const [genStep, setGenStep] = useState(0);
   const [screenplay, setScreenplay] = useState<Screenplay | null>(null);
 
+  // Offline & Static Host Support (Netlify/Vercel)
+  const [useDirectGemini, setUseDirectGemini] = useState<boolean>(() => {
+    return localStorage.getItem("STUDIO_TRIET_USE_DIRECT_GEMINI") === "true";
+  });
+  const [clientApiKey, setClientApiKey] = useState<string>(() => {
+    return localStorage.getItem("STUDIO_TRIET_CLIENT_API_KEY") || "";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("STUDIO_TRIET_USE_DIRECT_GEMINI", String(useDirectGemini));
+  }, [useDirectGemini]);
+
+  useEffect(() => {
+    localStorage.setItem("STUDIO_TRIET_CLIENT_API_KEY", clientApiKey);
+  }, [clientApiKey]);
+
+  // Direct client-side calls to official Google Gemini API - perfectly bypasses Node server for Netlify static deployments
+  const callGeminiRestDirect = async (prompt: string, schema: any) => {
+    const key = clientApiKey.trim() || (import.meta as any).env?.VITE_GEMINI_API_KEY || "";
+    if (!key) {
+      throw new Error(
+        "CHƯA KHAI BÁO GEMINI API KEY:\n\n" +
+        "Vui lòng nhập mã khóa Gemini API Key cá nhân của bạn bên khung cấu hình 'Netlify/Static Host' ở cột trái để chạy trực tiếp không cần máy chủ (Client-side Direct Mode)!"
+      );
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
+
+    const requestBody: any = {
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.35,
+        responseMimeType: "application/json"
+      }
+    };
+
+    if (schema) {
+      requestBody.generationConfig.responseSchema = schema;
+    }
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errDetail = errData?.error?.message || `HTTP Code ${res.status}`;
+        throw new Error(`Yêu cầu Gemini API bị từ chối: ${errDetail}`);
+      }
+
+      const resJson = await res.json();
+      const candidateText = resJson?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!candidateText) {
+        throw new Error("Không nhận được dữ liệu kịch bản hợp lệ từ Gemini REST. Hãy đảm bảo API Key của bạn khả dụng.");
+      }
+      return JSON.parse(candidateText.trim());
+    } catch (error: any) {
+      console.error("Client call direct failed:", error);
+      throw new Error(`[Lỗi Direct Client Gemini] ` + error.message);
+    }
+  };
+
   // UI Message States & Alerts
   const [alertMsg, setAlertMsg] = useState<{ type: "success" | "error" | "info"; text: string } | null>(null);
 
@@ -444,20 +519,36 @@ export default function App() {
     showNotification("Đang phân tích nhân diện và phong cách áo quần bằng AI...", "info");
 
     try {
-      const data = await safeFetchJson("/api/analyze-character", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formattedName,
-          outfits: charOutfit
-        })
-      });
+      let description = "";
+      if (useDirectGemini) {
+        // Run locally with zero network latency or API expense
+        description = `${formattedName} character face structure, features, hairstyle, and facial expression must perfectly match the original face from the reference photos. Outfit: ${charOutfit || "Default clothing from the reference photos."}\n(Đảm bảo nhận diện theo khuôn mặt ảnh gốc, là được.)`;
+      } else {
+        try {
+          const data = await safeFetchJson("/api/analyze-character", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: formattedName,
+              outfits: charOutfit
+            })
+          });
+          description = data.description;
+        } catch (fetchErr: any) {
+          if (fetchErr.message.includes("NETLIFY") || fetchErr.message.includes("TĨNH") || fetchErr.message.includes("HTML")) {
+            throw new Error(
+              fetchErr.message + "\n\n💡 MẸO KHẮC PHỤC NHANH: Hãy bật 'Chế độ Trực tiếp (Netlify/Offline)' ở bảng cấu hình Netlify cột trái và dán API Key của bạn để sử dụng ngay mà không báo lỗi này!"
+            );
+          }
+          throw fetchErr;
+        }
+      }
 
       const newChar: Character = {
         id: "char-" + Date.now(),
         name: formattedName,
         outfits: charOutfit || "Trang phục mặc định theo ảnh gieo phối",
-        description: data.description,
+        description: description,
         images: [...charImages],
         isLocked: true
       };
@@ -491,17 +582,33 @@ export default function App() {
     showNotification("Đang soi chiếu nhãn hàng, văn tự và bố cục sản phẩm...", "info");
 
     try {
-      const data = await safeFetchJson("/api/analyze-product", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: prodName
-        })
-      });
+      let description = "";
+      if (useDirectGemini) {
+        // Run locally
+        description = `Product "${prodName}". Brand logo, packaging colors, textual details, and shape structure must exactly resemble the original product from the reference photo.\n(Đảm bảo nhận diện theo nhãn mác sản phẩm ảnh gốc, là được.)`;
+      } else {
+        try {
+          const data = await safeFetchJson("/api/analyze-product", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: prodName
+            })
+          });
+          description = data.description;
+        } catch (fetchErr: any) {
+          if (fetchErr.message.includes("NETLIFY") || fetchErr.message.includes("TĨNH") || fetchErr.message.includes("HTML")) {
+            throw new Error(
+              fetchErr.message + "\n\n💡 MẸO KHẮC PHỤC NHANH: Hãy bật 'Chế độ Trực tiếp (Netlify/Offline)' ở bảng cấu hình Netlify cột trái và dán API Key của bạn để sử dụng ngay mà không báo lỗi này!"
+            );
+          }
+          throw fetchErr;
+        }
+      }
 
       const newProd: Product = {
         name: prodName,
-        description: data.description,
+        description: description,
         image: prodImage
       };
 
@@ -540,35 +647,148 @@ export default function App() {
 
     // Simulated interactive step progress for high-quality professional UX
     const timer1 = setTimeout(() => setGenStep(2), 2500);
-    const timer2 = setTimeout(() => setGenStep(3), 5000);
-    const timer3 = setTimeout(() => setGenStep(4), 7500);
+    const timer2 = setTimeout(() => setGenStep(3), 5500);
+    const timer3 = setTimeout(() => setGenStep(4), 8500);
 
     try {
-      const data = await safeFetchJson("/api/generate-screenplay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          idea: idea,
-          characters: characters,
-          product: product,
-          totalDuration: totalDuration,
-          durationGroup: durationGroup,
-          style: screenplayStyle
-        })
-      });
+      let scenesData: any[] = [];
+      const durationUnit = durationGroup === "10s" ? 10 : 8;
+      const numScenes = Math.ceil(totalDuration / durationUnit);
+      const maxWords = durationUnit === 10 ? 25 : 18;
+
+      if (useDirectGemini) {
+        let styleDescription = "PHONG CÁCH MẶC ĐỊNH: Đa dạng, linh hoạt và cân bằng giữa nghệ thuật lẫn thương mại.";
+        if (screenplayStyle === "cinematic") {
+          styleDescription = "PHONG CÁCH ĐIỆN ẢNH (Cinematic Cinematic Cinematic): Bố cục khung hình hoành tráng phong cách điện ảnh Hollywood, bối cảnh tỉ mỉ sâu sắc, độ tương phản ánh sáng nghệ thuật cao (high contrast chiaroscuro), chuyển động camera mượt mà có nhịp điệu (slow cinematic panning/tracking/push-in), diễn tả nội tâm và cảm xúc nhân vật lắng đọng.";
+        } else if (screenplayStyle === "daily") {
+          styleDescription = "PHONG CÁCH ĐỜI SỐNG SINH HOẠT (Slice-of-life/Daily/Vlogger): Góc quay chân thực sắc bén giống máy quay cầm tay hoặc máy quay Vlog mộc mạc, ánh sáng ban ngày tự nhiên tràn ngập, động thái mộc mạc chân thật, bối cảnh đời thường gần gũi sống động đầy sinh khí.";
+        } else if (screenplayStyle === "commercial") {
+          styleDescription = "PHONG CÁCH QUẢNG CÁO THƯƠNG MẠI (Commercial Brand Promo): Bố cục hiện đại, màu sắc rực rỡ tươi sáng bắt mắt, ánh sáng studio căng mịn sang trọng (stylized key light/rim light rõ nét), góc máy chuyển động nhanh sôi động trẻ trung, zoom cận cảnh cực nét chi tiết cấu trúc góc viền nhãn mác sản phẩm và hành trình xúc cảm người mua.";
+        }
+
+        let charactersInfo = "Không sử dụng nhân vật ngoại cảnh đặc biệt.";
+        if (characters && characters.length > 0) {
+          charactersInfo = characters
+            .map((char: any) => {
+              return `- Nhân vật ${char.name} (Tên bắt đầu bằng @):
+      + Mô tả ngoại hình & trang phục: ${char.description}
+      + Outfit gốc đã khóa: ${char.outfits || "Mặc định theo ảnh gốc"}`;
+            })
+            .join("\n\n");
+        }
+
+        let productInfo = "Không bao gồm sản phẩm thương mại cụ thể.";
+        if (product && product.name) {
+          productInfo = `- Sản phẩm: "${product.name}"
+      + Đặc điểm nhận dạng & chi tiết nhãn: ${product.description}`;
+        }
+
+        const promptText = `Bạn là một biên kịch danh tiếng và kỹ sư thiết kế prompt (prompt engineer) video chuyên nghiệp dạn dày kinh nghiệm tại STUDIO-TRIET.
+Nhiệm vụ của bạn là chuyển thể Ý tưởng kịch bản (Idea) dưới đây thành một kịch bản video từng phân cảnh đồng bộ, tối ưu thời lượng và nhất quán về nhân vật lẫn sản phẩm.
+
+Ý TƯỞNG KỊCH BẢN CHỦ ĐẠO:
+"${idea}"
+
+YÊU CẦU PHONG CÁCH NGHỆ THUẬT CHỈ ĐỊNH:
+${styleDescription}
+
+THÔNG TIN QUY CHUẨN ĐỒNG BỘ:
+- Nhóm thời lượng: Phân cảnh ${durationUnit} giây.
+- Tổng thời lượng video: ${totalDuration} giây.
+- Tổng số phân cảnh cần tạo: ${numScenes} phân cảnh (Mỗi cảnh dài đúng ${durationUnit}s để tổng đạt ${totalDuration}s).
+- Nhân vật tham chiếu cần sử dụng (nếu phù hợp):
+${charactersInfo}
+- Sản phẩm quảng cáo cần sử dụng (nếu phù hợp):
+${productInfo}
+
+YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
+1. Tính Nhất Quán Xuyên Suốt: Cốt truyện kịch bản phải có tính kết nối mạch lạc, phong cách nghệ thuật, bối cảnh ánh sáng và diện mạo nhân vật/sản phẩm phải nhất quán từ phân cảnh đầu đến phân cảnh cuối theo đúng phong cách nghệ thuật đã yêu cầu ở trên.
+2. Quy tắc thời lượng lời thoại (audioPrompt):
+   - Cảnh dài ${durationUnit} giây CHỈ được chứa tối đa ${maxWords} từ tiếng Việt trong lời thoại để phát âm vừa vặn, truyền cảm, tự nhiên và không bị hụt hơi.
+   - Bạn PHẢI thiết lập độ dài lời thoại ngắn gọn, súc tích nhất có thể để khớp hoàn hảo trong khu vực thời gian ${durationUnit}s. Nếu ý tưởng lời thoại quá dài vượt khung, bạn BẮT BUỘC phải chuyển bớt ý hoặc câu thoại tiếp theo sang phân cảnh tiếp sau.
+3. Cú pháp viết Video Visual Prompt (visualPrompt):
+   - Viết hoàn toàn bằng TIẾNG ANH chuyên sâu để các mô hình AI tạo video lớn hiểu chính xác.
+   - Phải mô tả chi tiết phù hợp phong cách đã chọn: Góc quay (e.g. medium shot, extreme close-up), động tác camera (e.g. cinematic slow panning, smooth push-in, tracking shot), ánh sáng (cinematic lighting, warm sunset glow), bối cảnh chính xác và diễn biến hành động.
+   - Hãy chèn chính xác từ khóa tên nhân vật dạng "@TênNhânVật" cùng các đặc điểm nhận diện ngoại hình đi kèm đã khóa ở trên để AI tạo cảnh có mặt nhân vật chuẩn xác nhất.
+   - Thể hiện sản phẩm chi tiết nếu cảnh đó có xuất hiện sản phẩm.
+4. Lời thoại (audioPrompt): Viết bằng TIẾNG VIỆT tự nhiên, súc tích, cực kỳ truyền cảm bám sát kịch bản, khớp với hoạt cảnh diễn ra.
+5. Ghi chú phân cảnh (notes): Viết bằng TIẾNG VIỆT về chuyển động, biểu cảm, nhịp điệu diễn xuất hoặc chuyển động của máy quay, âm thanh bối cảnh (SFX, Ambient).`;
+
+        const schema = {
+          type: "OBJECT",
+          properties: {
+            scenes: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  sceneNumber: {
+                    type: "INTEGER",
+                    description: "Thứ tự phân cảnh (bắt đầu từ 1)",
+                  },
+                  duration: {
+                    type: "INTEGER",
+                    description: `Thời lượng phân cảnh, phải bằng đúng ${durationUnit}`,
+                  },
+                  visualPrompt: {
+                    type: "STRING",
+                    description: "Detailed video generation prompt in English, incorporating character details with @name and product look-and-feel.",
+                  },
+                  audioPrompt: {
+                    type: "STRING",
+                    description: `Voiceover narration text in Vietnamese. Max ${maxWords} words to fit ${durationUnit} seconds perfectly!`,
+                  },
+                  notes: {
+                    type: "STRING",
+                    description: "Production and sound direction notes in Vietnamese.",
+                  },
+                },
+                required: ["sceneNumber", "duration", "visualPrompt", "audioPrompt", "notes"],
+              },
+            },
+          },
+          required: ["scenes"],
+        };
+
+        const result = await callGeminiRestDirect(promptText, schema);
+        scenesData = Array.isArray(result) ? result : (result.scenes || []);
+      } else {
+        try {
+          const data = await safeFetchJson("/api/generate-screenplay", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              idea: idea,
+              characters: characters,
+              product: product,
+              totalDuration: totalDuration,
+              durationGroup: durationGroup,
+              style: screenplayStyle
+            })
+          });
+          scenesData = data.scenes;
+        } catch (fetchErr: any) {
+          if (fetchErr.message.includes("NETLIFY") || fetchErr.message.includes("TĨNH") || fetchErr.message.includes("HTML")) {
+            throw new Error(
+              fetchErr.message + "\n\n💡 MẸO KHẮC PHỤC NHANH: Hãy bật 'Chế độ Trực tiếp (Netlify/Offline)' ở bảng cấu hình Netlify cột trái và dán API Key của bạn để sử dụng ngay mà không báo lỗi này!"
+            );
+          }
+          throw fetchErr;
+        }
+      }
 
       const newScreenplay: Screenplay = {
         id: "sc-" + Date.now(),
         idea: idea,
         totalDuration: totalDuration,
         durationGroup: durationGroup,
-        scenes: data.scenes,
+        scenes: scenesData,
         createdAt: new Date().toLocaleTimeString("vi-VN")
       };
 
       // Set empty feedback keys
       const initialFeedbacks: { [key: number]: string } = {};
-      data.scenes.forEach((s: any) => {
+      scenesData.forEach((s: any) => {
         initialFeedbacks[s.sceneNumber] = "";
       });
       setSceneFeedbacks(initialFeedbacks);
@@ -604,21 +824,96 @@ export default function App() {
 
     try {
       const durationUnit = durationGroup === "10s" ? 10 : 8;
-      const data = await safeFetchJson("/api/regenerate-scene", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          idea: screenplay.idea,
-          characters: characters,
-          product: product,
-          durationUnit: durationUnit,
-          currentScenes: screenplay.scenes,
-          targetSceneNumber: sceneNum,
-          feedback: feedbackText
-        })
-      });
+      let updatedScene: ScreenplayScene;
 
-      const updatedScene: ScreenplayScene = data.updatedScene;
+      if (useDirectGemini) {
+        const maxWords = durationUnit === 10 ? 25 : 18;
+
+        // Characters formatting
+        let charactersInfo = "";
+        if (characters && characters.length > 0) {
+          charactersInfo = characters
+            .map((char: any) => `- Nhân vật ${char.name}: ${char.description}`)
+            .join("\n");
+        }
+
+        // Product formatting
+        let productInfo = "";
+        if (product && product.name) {
+          productInfo = `- Sản phẩm "${product.name}": ${product.description}`;
+        }
+
+        const contextPrompt = `Bạn là một biên kịch chuyên nghiệp và kỹ sư thiết kế prompt video tại STUDIO-TRIET.
+Chúng ta đang cải tạo và tạo lại DUY NHẤT một Phân Cảnh trong kịch bản tổng thể.
+
+Ý TƯỞNG KỊCH BẢN CHUNG:
+"${screenplay.idea}"
+
+BỐI CẢNH CÁC NHÂN VẬT & SẢN PHẨM:
+${charactersInfo}
+${productInfo}
+
+MÔ TẢ TOÀN BỘ KỊCH BẢN HIỆN TẠI:
+${JSON.stringify(screenplay.scenes, null, 2)}
+
+YÊU CẦU ĐẶC BIỆT TỪ NGƯỜI DÙNG CHO PHÂN CẢNH SỐ ${sceneNum}:
+"${feedbackText}"
+
+HÃY TẠO LẠI PHÂN CẢNH SỐ ${sceneNum} NÀY để đáp ứng mong muốn trên nhưng VẪN PHẢI GIỮ TÍNH MẠCH LẠC, NHẤT QUÁN kết cấu chung của toàn bộ kịch bản.
+Đảm bảo lời thoại tiếng Việt (audioPrompt) cực kỳ ngắn gọn, sắc sảo và KHÔNG vượt quá ${maxWords} từ để vừa khít thời lượng ${durationUnit}s.
+Visual prompt cho video phải viết bằng tiếng Anh chi tiết cao (khoảng 100 từ).`;
+
+        const schema = {
+          type: "OBJECT",
+          properties: {
+            sceneNumber: {
+              type: "INTEGER",
+            },
+            duration: {
+              type: "INTEGER",
+            },
+            visualPrompt: {
+              type: "STRING",
+              description: "Detailed video generation prompt in English, incorporating character details with @name and product look-and-feel.",
+            },
+            audioPrompt: {
+              type: "STRING",
+              description: `Voiceover narration text in Vietnamese. Max ${maxWords} words.`,
+            },
+            notes: {
+              type: "STRING",
+              description: "Staging, ambient sounds and staging notes in Vietnamese.",
+            },
+          },
+          required: ["sceneNumber", "duration", "visualPrompt", "audioPrompt", "notes"],
+        };
+
+        updatedScene = await callGeminiRestDirect(contextPrompt, schema);
+      } else {
+        try {
+          const data = await safeFetchJson("/api/regenerate-scene", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              idea: screenplay.idea,
+              characters: characters,
+              product: product,
+              durationUnit: durationUnit,
+              currentScenes: screenplay.scenes,
+              targetSceneNumber: sceneNum,
+              feedback: feedbackText
+            })
+          });
+          updatedScene = data.updatedScene;
+        } catch (fetchErr: any) {
+          if (fetchErr.message.includes("NETLIFY") || fetchErr.message.includes("TĨNH") || fetchErr.message.includes("HTML")) {
+            throw new Error(
+              fetchErr.message + "\n\n💡 MẸO KHẮC PHỤC NHANH: Hãy bật 'Chế độ Trực tiếp (Netlify/Offline)' ở bảng cấu hình Netlify cột trái và dán API Key của bạn để sử dụng ngay mà không báo lỗi này!"
+            );
+          }
+          throw fetchErr;
+        }
+      }
 
       // Update the scene object inside screenplay array
       const updatedScenes = screenplay.scenes.map(s => {
@@ -817,6 +1112,69 @@ Sản xuất bởi STUDIO-TRIET.
                     Khóa nhân diện nhân vật <span className="text-emerald-600 font-black font-mono">@name</span> và kết cấu sản phẩm dựa trên ảnh tham chiếu thật. AI sẽ đóng gói đặc trưng hình ảnh dưới dạng ngôn ngữ kỹ thuật sâu để nhúng đồng bộ vào mọi cảnh kịch bản, giúp bạn tạo video không bị đổi gương mặt, sai quần áo, lệch nhãn mác.
                   </p>
                 </div>
+              </div>
+            </div>
+
+            {/* Netlify / Static Hosting Support Dashboard Panel */}
+            <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-md shadow-stone-100/35 space-y-4">
+              <div className="flex items-center gap-2.5 pb-2.5 border-b border-stone-100">
+                <div className="p-1 px-2 rounded bg-amber-50 text-amber-700 font-extrabold text-[10.5px] uppercase tracking-wider border border-amber-200">
+                  Netlify / Static Host
+                </div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-stone-800">
+                  Cấu hình Chạy Trực Tiếp
+                </h3>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-[11.5px] text-stone-600 leading-relaxed font-semibold">
+                  Môi trường Netlify là máy chủ tĩnh (không có Node backend). Hãy kích hoạt **Mã Khóa Trực Tiếp** để gọi Gemini trực tiếp an toàn từ trình duyệt của bạn!
+                </p>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-stone-50 border border-stone-200 shadow-inner">
+                  <span className="text-[11.5px] font-bold text-stone-700">
+                    Chạy trực tiếp bằng API Key riêng
+                  </span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useDirectGemini}
+                      onChange={(e) => setUseDirectGemini(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-stone-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-emerald-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute peer-checked:after:left-[18px] after:top-0.5 after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {useDirectGemini && (
+                  <div className="space-y-2 pt-1">
+                    <label className="text-[11px] font-bold text-stone-500 block uppercase tracking-wide">
+                      Mã khóa Gemini API của bạn (Private Key)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        placeholder="Hãy dán mã AIzaSy... của bạn tại đây"
+                        value={clientApiKey}
+                        onChange={(e) => setClientApiKey(e.target.value)}
+                        className="w-full bg-stone-50 px-3.5 py-2 rounded-lg border border-stone-350 focus:border-emerald-500 focus:bg-white text-xs focus:outline-none transition-all font-mono text-stone-800"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center px-0.5 pt-0.5">
+                      <span className="text-[9.5px] text-stone-400 font-bold leading-tight">
+                        Lưu ẩn an toàn tại LocalStorage trình duyệt của bạn.
+                      </span>
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[10px] text-emerald-600 hover:underline font-extrabold shrink-0 flex items-center gap-0.5"
+                      >
+                        Lấy API Key Miễn Phí ↗
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
