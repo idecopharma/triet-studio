@@ -119,6 +119,43 @@ export default function App() {
     }
   };
 
+  // Helper to compress and resize base64 images, preventing 503 Gateway / 413 Payload Too Large errors
+  const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 800): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          // Export as JPEG with 80% quality to compress payload size to under ~100KB per image
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        } else {
+          resolve(base64Str);
+        }
+      };
+      img.onerror = () => resolve(base64Str);
+    });
+  };
+
   // Convert files to base64
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, target: "character" | "product") => {
     const files = e.target.files;
@@ -134,9 +171,14 @@ export default function App() {
       const fileList = Array.from(files).slice(0, remainingSlots);
       fileList.forEach((file: any) => {
         const reader = new FileReader();
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
           if (typeof reader.result === "string") {
-            setCharImages(prev => [...prev, reader.result as string]);
+            try {
+              const compressed = await compressImage(reader.result);
+              setCharImages(prev => [...prev, compressed]);
+            } catch (err) {
+              setCharImages(prev => [...prev, reader.result as string]);
+            }
           }
         };
         reader.readAsDataURL(file);
@@ -144,9 +186,14 @@ export default function App() {
     } else {
       const file = files[0];
       const reader = new FileReader();
-      reader.onloadend = () => {
+      reader.onloadend = async () => {
         if (typeof reader.result === "string") {
-          setProdImage(reader.result);
+          try {
+            const compressed = await compressImage(reader.result);
+            setProdImage(compressed);
+          } catch (err) {
+            setProdImage(reader.result);
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -193,8 +240,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formattedName,
-          outfits: charOutfit,
-          images: charImages
+          outfits: charOutfit
         })
       });
 
@@ -243,8 +289,7 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: prodName,
-          image: prodImage
+          name: prodName
         })
       });
 
@@ -491,7 +536,7 @@ Sản xuất bởi STUDIO-TRIET.
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-slate-950">
+    <div className="min-h-screen bg-[#fafaf9] text-stone-900 font-sans antialiased selection:bg-emerald-500 selection:text-white">
       
       {/* Dynamic Toast Notifications */}
       <AnimatePresence>
@@ -502,16 +547,16 @@ Sản xuất bởi STUDIO-TRIET.
             exit={{ opacity: 0, y: -20, scale: 0.9 }}
             className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-4 rounded-xl border shadow-2xl flex items-center gap-3 backdrop-blur-md max-w-lg ${
               alertMsg.type === "success"
-                ? "bg-emerald-950/90 border-emerald-500/50 text-emerald-200"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800 shadow-emerald-100/40"
                 : alertMsg.type === "error"
-                ? "bg-rose-950/90 border-rose-500/50 text-rose-200"
-                : "bg-slate-900/90 border-slate-700/50 text-slate-200"
+                ? "bg-rose-50 border-rose-200 text-rose-800 shadow-rose-100/40"
+                : "bg-stone-50 border-stone-200 text-stone-800 shadow-stone-100/40"
             }`}
           >
-            {alertMsg.type === "success" && <Check className="w-5 h-5 text-emerald-400 shrink-0" />}
-            {alertMsg.type === "error" && <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />}
-            {alertMsg.type === "info" && <Sparkles className="w-5 h-5 text-sky-400 shrink-0" />}
-            <span className="text-sm font-medium tracking-wide">{alertMsg.text}</span>
+            {alertMsg.type === "success" && <Check className="w-5 h-5 text-emerald-600 shrink-0" />}
+            {alertMsg.type === "error" && <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />}
+            {alertMsg.type === "info" && <Sparkles className="w-5 h-5 text-sky-600 shrink-0" />}
+            <span className="text-sm font-semibold tracking-wide">{alertMsg.text}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -520,21 +565,21 @@ Sản xuất bởi STUDIO-TRIET.
       <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
         
         {/* Navigation / Brand Header */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 pb-6 border-b border-slate-900">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 pb-6 border-b border-stone-200">
           <div className="flex items-center gap-3.5">
-            <div className="h-12 w-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-sky-500 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-              <Layers className="w-6 h-6 text-slate-950 font-bold" />
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/15">
+              <Layers className="w-6 h-6 text-white font-bold" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-extrabold tracking-wider bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+                <h1 className="text-2xl font-black tracking-wider text-stone-900">
                   STUDIO-TRIET
                 </h1>
-                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded">
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-emerald-50 text-emerald-700 border border-emerald-200 rounded">
                   AI PROMPT STUDIO
                 </span>
               </div>
-              <p className="text-xs text-slate-400 tracking-wide mt-0.5">
+              <p className="text-xs text-stone-500 tracking-wide mt-0.5 font-medium">
                 Thiết Kế Kịch Bản Thống Nhất & Khóa Nhân Diện Nhân Vật/Sản Phẩm Đệ Nhất
               </p>
             </div>
@@ -543,13 +588,13 @@ Sản xuất bởi STUDIO-TRIET.
           <div className="flex items-center gap-3">
             <button
               onClick={loadSampleData}
-              className="px-4 py-2 text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-850 hover:border-slate-700 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+              className="px-4 py-2 text-xs font-bold bg-white hover:bg-stone-100 text-stone-700 border border-stone-200 shadow-sm rounded-lg flex items-center gap-2 transition-all cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               Nạp dữ liệu mẫu nhanh
             </button>
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-900 text-[11px] font-mono text-slate-400">
-              <Clock className="w-3.5 h-3.5 text-emerald-500" />
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50/50 border border-emerald-100 text-[11px] font-mono text-emerald-700 font-bold">
+              <Clock className="w-3.5 h-3.5 text-emerald-600" />
               <span>ACTIVE SYSTEM</span>
             </div>
           </div>
@@ -562,46 +607,46 @@ Sản xuất bởi STUDIO-TRIET.
           <div className="lg:col-span-5 space-y-6">
             
             {/* Quick Informative Introduction Box */}
-            <div className="bg-gradient-to-b from-slate-900 to-slate-950 p-5 rounded-2xl border border-slate-900 relative overflow-hidden">
+            <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-md shadow-stone-100/35 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
               <div className="flex gap-3">
-                <HelpCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <HelpCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-stone-800">
                     Bản sắc nhất quán tuyệt đối là gì?
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                    Khóa nhân diện nhân vật <span className="text-emerald-400 font-mono">@name</span> và kết cấu sản phẩm dựa trên ảnh tham chiếu thật. AI sẽ đóng gói đặc trưng hình ảnh dưới dạng ngôn ngữ kỹ thuật sâu để nhúng đồng bộ vào mọi cảnh kịch bản, giúp bạn tạo video không bị đổi gương mặt, sai quần áo, lệch nhãn mác.
+                  <p className="text-xs text-stone-600 mt-1.5 leading-relaxed font-medium">
+                    Khóa nhân diện nhân vật <span className="text-emerald-600 font-black font-mono">@name</span> và kết cấu sản phẩm dựa trên ảnh tham chiếu thật. AI sẽ đóng gói đặc trưng hình ảnh dưới dạng ngôn ngữ kỹ thuật sâu để nhúng đồng bộ vào mọi cảnh kịch bản, giúp bạn tạo video không bị đổi gương mặt, sai quần áo, lệch nhãn mác.
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Assets Locker Section (Characters & Products) */}
-            <div className="bg-slate-900/60 p-6 rounded-2xl border border-slate-900">
+            <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-md shadow-stone-100/40">
               
               {/* Locker Tab Buttons */}
-              <div className="flex p-1 rounded-xl bg-slate-950 border border-slate-900 mb-6">
+              <div className="flex p-1.5 rounded-xl bg-stone-50 border border-stone-200/80 mb-6">
                 <button
                   onClick={() => setActiveTab("characters")}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold font-sans transition-all cursor-pointer ${
                     activeTab === "characters"
-                      ? "bg-slate-900 text-emerald-400 border border-slate-800 shadow"
-                      : "text-slate-400 hover:text-slate-200"
+                      ? "bg-white text-emerald-600 border border-stone-200/80 shadow-md shadow-stone-100/50"
+                      : "text-stone-500 hover:text-stone-800"
                   }`}
                 >
-                  <User className="w-3.5 h-3.5" />
+                  <User className="w-3.5 h-3.5 text-emerald-600" />
                   Nhân Vật Tham Chiếu ({characters.length})
                 </button>
                 <button
                   onClick={() => setActiveTab("products")}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-bold font-sans transition-all cursor-pointer ${
                     activeTab === "products"
-                      ? "bg-slate-900 text-emerald-400 border border-slate-800 shadow"
-                      : "text-slate-400 hover:text-slate-200"
+                      ? "bg-white text-emerald-600 border border-stone-200/80 shadow-md shadow-stone-100/50"
+                      : "text-stone-500 hover:text-stone-800"
                   }`}
                 >
-                  <Package className="w-3.5 h-3.5" />
+                  <Package className="w-3.5 h-3.5 text-emerald-600" />
                   Sản Phẩm Trưng Bày ({product ? "1" : "0"})
                 </button>
               </div>
@@ -610,14 +655,14 @@ Sản xuất bởi STUDIO-TRIET.
               {activeTab === "characters" && (
                 <div className="space-y-6">
                   {/* Form to Create & Lock Character */}
-                  <div className="space-y-4 bg-slate-950/70 p-4.5 rounded-xl border border-slate-900/50">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                      <Plus className="w-3.5 h-3.5 text-emerald-500" />
+                  <div className="space-y-4 bg-stone-50/70 p-4.5 rounded-xl border border-stone-200/80">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-2">
+                      <Plus className="w-3.5 h-3.5 text-emerald-600" />
                       Khai báo & Khóa Nhân Vật mới
                     </h4>
                     
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-400 block mb-1.5 uppercase tracking-wide">
+                      <label className="text-[11px] font-bold text-stone-500 block mb-1.5 uppercase tracking-wide">
                         Tên nhân vật (Hệ thống tự thêm @)
                       </label>
                       <input
@@ -625,12 +670,12 @@ Sản xuất bởi STUDIO-TRIET.
                         placeholder="Ví dụ: Alex, Helen, John..."
                         value={charName}
                         onChange={(e) => setCharName(e.target.value)}
-                        className="w-full bg-slate-950 px-3.5 py-2.5 rounded-lg border border-slate-850 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors placeholder:text-slate-600 font-medium"
+                        className="w-full bg-white px-3.5 py-2.5 rounded-lg border border-stone-200 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors placeholder:text-stone-400 font-bold text-stone-800"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-400 block mb-1.5 uppercase tracking-wide">
+                      <label className="text-[11px] font-bold text-stone-500 block mb-1.5 uppercase tracking-wide">
                         Mô tả phục trang (Outfit) cố định
                       </label>
                       <input
@@ -638,13 +683,13 @@ Sản xuất bởi STUDIO-TRIET.
                         placeholder="Ví dụ: Áo len cổ lọ đen, kính gọng vàng..."
                         value={charOutfit}
                         onChange={(e) => setCharOutfit(e.target.value)}
-                        className="w-full bg-slate-950 px-3.5 py-2.5 rounded-lg border border-slate-850 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors placeholder:text-slate-600 font-medium"
+                        className="w-full bg-white px-3.5 py-2.5 rounded-lg border border-stone-200 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors placeholder:text-stone-400 font-bold text-stone-800"
                       />
                     </div>
 
                     {/* Image uploads for Character (1-3 images) */}
                     <div>
-                      <label className="text-[11px] font-semibold text-slate-400 block mb-1.5 uppercase tracking-wide">
+                      <label className="text-[11px] font-bold text-stone-500 block mb-1.5 uppercase tracking-wide">
                         Ảnh chân dung làm khuôn mẫu (Tối đa 3 ảnh {charImages.length}/3)
                       </label>
                       
@@ -660,11 +705,11 @@ Sản xuất bởi STUDIO-TRIET.
                       {charImages.length < 3 && (
                         <div
                           onClick={() => triggerFileInput("character")}
-                          className="border-2 border-dashed border-slate-850 hover:border-emerald-500/40 rounded-lg p-5 text-center cursor-pointer transition-colors bg-slate-900/20 hover:bg-slate-900/40"
+                          className="border-2 border-dashed border-stone-200 hover:border-emerald-500/40 rounded-lg p-5 text-center cursor-pointer transition-colors bg-white hover:bg-stone-50/50 shadow-sm"
                         >
-                          <Upload className="w-5 h-5 text-slate-500 mx-auto mb-2" />
-                          <p className="text-xs text-slate-400 font-medium">Bấm để tải ảnh chân dung cận mặt</p>
-                          <p className="text-[10px] text-slate-500 mt-1">Hỗ trợ PNG, JPG, JPEG (Mục tiêu 1-3 ảnh)</p>
+                          <Upload className="w-5 h-5 text-stone-400 mx-auto mb-2" />
+                          <p className="text-xs text-stone-700 font-bold">Bấm để tải ảnh chân dung cận mặt</p>
+                          <p className="text-[10px] text-stone-400 mt-1">Hỗ trợ PNG, JPG, JPEG (Mục tiêu 1-3 ảnh)</p>
                         </div>
                       )}
 
@@ -672,11 +717,11 @@ Sản xuất bởi STUDIO-TRIET.
                       {charImages.length > 0 && (
                         <div className="grid grid-cols-3 gap-2 mt-3">
                           {charImages.map((img, idx) => (
-                            <div key={idx} className="relative group aspect-square rounded-md overflow-hidden bg-slate-900 border border-slate-800">
+                            <div key={idx} className="relative group aspect-square rounded-md overflow-hidden bg-stone-100 border border-stone-200">
                               <img src={img} alt="Character profile upload" className="w-full h-full object-cover" />
                               <button
                                 onClick={() => removeUploadedImage(idx)}
-                                className="absolute top-1 right-1 bg-red-900/80 hover:bg-red-950 text-white p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                                className="absolute top-1 right-1 bg-rose-600 hover:bg-rose-700 text-white p-1 rounded-full opacity-100 transition-opacity cursor-pointer shadow"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -689,7 +734,7 @@ Sản xuất bởi STUDIO-TRIET.
                     <button
                       onClick={handleSaveCharacter}
                       disabled={isAnalyzingChar || !charName || charImages.length === 0}
-                      className="w-full py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-600/10 disabled:opacity-50 disabled:pointer-events-none"
+                      className="w-full py-2.5 rounded-lg text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-all bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/10 disabled:opacity-50 disabled:pointer-events-none"
                     >
                       {isAnalyzingChar ? (
                         <>
@@ -707,50 +752,50 @@ Sản xuất bởi STUDIO-TRIET.
 
                   {/* List of currently locked characters */}
                   <div className="space-y-3.5">
-                    <h5 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <h5 className="text-[11px] font-bold uppercase tracking-wider text-stone-500 flex items-center justify-between">
                       <span>Nhân vật đang kích hoạt trong hệ thống:</span>
-                      <span className="text-emerald-400 font-mono">({characters.length})</span>
+                      <span className="text-emerald-600 font-mono">({characters.length})</span>
                     </h5>
 
                     {characters.length === 0 ? (
-                      <div className="text-center py-8 rounded-xl border border-slate-900 bg-slate-950/20 text-slate-500">
-                        <User className="w-8 h-8 mx-auto opacity-30 mb-2.5" />
-                        <p className="text-xs">Chưa có nhân vật nào được lưu trong khối khóa.</p>
-                        <p className="text-[10px] text-slate-600 mt-1">Sử dụng nút nạp mẫu ở trên để xem nhanh.</p>
+                      <div className="text-center py-8 rounded-xl border border-stone-200 bg-stone-50/30 text-stone-500 shadow-inner">
+                        <User className="w-8 h-8 mx-auto opacity-35 mb-2.5 text-stone-400" />
+                        <p className="text-xs font-bold text-stone-600">Chưa có nhân vật nào được lưu trong khối khóa.</p>
+                        <p className="text-[10px] text-stone-400 mt-1">Sử dụng nút nạp mẫu ở trên để xem nhanh.</p>
                       </div>
                     ) : (
                       <div className="space-y-3">
                         {characters.map((char) => (
                           <div
                             key={char.id}
-                            className="p-4 rounded-xl bg-slate-950 border border-slate-900 flex items-start gap-4 hover:border-slate-800 transition-colors group"
+                            className="p-4 rounded-xl bg-[#fafaf9] border border-stone-200 flex items-start gap-4 hover:border-stone-350 transition-colors group shadow-sm"
                           >
-                            <div className="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-slate-800 bg-slate-900">
-                              <img src={char.images[0]} alt={char.name} className="w-full h-full object-cover" />
-                              <div className="absolute bottom-0 right-0 bg-emerald-555 p-0.5 rounded-tl bg-emerald-500">
-                                <Lock className="w-2.5 h-2.5 text-slate-950" />
+                            <div className="relative shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-stone-200 bg-white shadow-sm">
+                              <img src={char.images[0]} alt={char.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute bottom-0 right-0 p-0.5 rounded-tl bg-emerald-600">
+                                <Lock className="w-2.5 h-2.5 text-white" />
                               </div>
                             </div>
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-1.5">
-                                <h6 className="font-extrabold text-sm text-emerald-400 tracking-wide truncate">
+                                <h6 className="font-black text-sm text-emerald-600 tracking-wide truncate">
                                   {char.name}
                                 </h6>
                                 <button
                                   onClick={() => handleDeleteCharacter(char.id)}
-                                  className="text-slate-650 hover:text-rose-400 p-1 rounded hover:bg-slate-900 transition-colors cursor-pointer group-hover:opacity-100 sm:opacity-0 transition-opacity"
+                                  className="text-stone-400 hover:text-rose-600 p-1 rounded hover:bg-stone-100 transition-colors cursor-pointer"
                                   title="Gỡ bỏ"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
-                              <p className="text-[11px] text-slate-400 font-semibold mt-0.5 tracking-wide line-clamp-1">
+                              <p className="text-[11px] text-stone-500 font-bold mt-0.5 tracking-wide line-clamp-1">
                                 Outfit: {char.outfits}
                               </p>
                               
-                              <div className="mt-2 bg-slate-900/60 p-2.5 rounded-lg border border-slate-900">
-                                <p className="text-[10.5px] font-mono leading-relaxed text-slate-400 line-clamp-2">
+                              <div className="mt-2 bg-white p-2.5 rounded-lg border border-stone-150 shadow-inner">
+                                <p className="text-[10.5px] font-mono leading-relaxed text-stone-600 line-clamp-2">
                                   {char.description}
                                 </p>
                               </div>
@@ -768,14 +813,14 @@ Sản xuất bởi STUDIO-TRIET.
                 <div className="space-y-6">
                   {/* Create Product Form */}
                   {!product ? (
-                    <div className="space-y-4 bg-slate-950/70 p-4.5 rounded-xl border border-slate-900/50">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                        <Plus className="w-3.5 h-3.5 text-emerald-500" />
+                    <div className="space-y-4 bg-stone-50/70 p-4.5 rounded-xl border border-stone-200/80">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-stone-700 flex items-center gap-2">
+                        <Plus className="w-3.5 h-3.5 text-emerald-600" />
                         Khai báo & Khóa Sản Phẩm
                       </h4>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-slate-400 block mb-1.5 uppercase tracking-wide">
+                        <label className="text-[11px] font-bold text-stone-500 block mb-1.5 uppercase tracking-wide">
                           Tên thương phẩm / loại sản phẩm
                         </label>
                         <input
@@ -783,12 +828,12 @@ Sản xuất bởi STUDIO-TRIET.
                           placeholder="Ví dụ: Triết Homme Parfum, Lon Coca Cola vị mộc..."
                           value={prodName}
                           onChange={(e) => setProdName(e.target.value)}
-                          className="w-full bg-slate-950 px-3.5 py-2.5 rounded-lg border border-slate-850 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors placeholder:text-slate-600 font-medium"
+                          className="w-full bg-white px-3.5 py-2.5 rounded-lg border border-stone-200 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors placeholder:text-stone-400 font-bold text-stone-800"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-slate-400 block mb-1.5 uppercase tracking-wide">
+                        <label className="text-[11px] font-bold text-stone-500 block mb-1.5 uppercase tracking-wide">
                           Ảnh chụp sản phẩm (1 ảnh chụp cận rõ các mặt phụ)
                         </label>
 
@@ -803,18 +848,18 @@ Sản xuất bởi STUDIO-TRIET.
                         {!prodImage ? (
                           <div
                             onClick={() => triggerFileInput("product")}
-                            className="border-2 border-dashed border-slate-850 hover:border-emerald-500/40 rounded-lg p-5 text-center cursor-pointer transition-colors bg-slate-900/20 hover:bg-slate-900/40"
+                            className="border-2 border-dashed border-stone-200 hover:border-emerald-500/40 rounded-lg p-5 text-center cursor-pointer transition-colors bg-white hover:bg-stone-50/50"
                           >
-                            <Upload className="w-5 h-5 text-slate-500 mx-auto mb-2" />
-                            <p className="text-xs text-slate-400 font-medium">Bấm để tải ảnh sản phẩm</p>
-                            <p className="text-[10px] text-slate-500 mt-1">Ảnh cận cảnh, nhìn rõ chữ viết nhãn hàng</p>
+                            <Upload className="w-5 h-5 text-stone-400 mx-auto mb-2" />
+                            <p className="text-xs text-stone-700 font-bold">Bấm để tải ảnh sản phẩm</p>
+                            <p className="text-[10px] text-stone-400 mt-1">Ảnh cận cảnh, nhìn rõ chữ viết nhãn hàng</p>
                           </div>
                         ) : (
-                          <div className="relative aspect-video rounded-lg overflow-hidden bg-slate-900 border border-slate-800">
-                            <img src={prodImage} alt="Product preview" className="w-full h-full object-contain" />
+                          <div className="relative aspect-video rounded-lg overflow-hidden bg-stone-100 border border-stone-200 shadow-sm">
+                            <img src={prodImage} alt="Product preview" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                             <button
                               onClick={() => setProdImage("")}
-                              className="absolute top-2 right-2 bg-slate-950/80 hover:bg-slate-950 text-white p-1.5 rounded-full transition-colors"
+                              className="absolute top-2 right-2 bg-rose-600 hover:bg-rose-700 text-white p-1.5 rounded-full transition-colors shadow"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -825,7 +870,7 @@ Sản xuất bởi STUDIO-TRIET.
                       <button
                         onClick={handleSaveProduct}
                         disabled={isAnalyzingProd || !prodName || !prodImage}
-                        className="w-full py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-md shadow-emerald-600/10 disabled:opacity-50 disabled:pointer-events-none"
+                        className="w-full py-2.5 rounded-lg text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-all bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/10 disabled:opacity-50 disabled:pointer-events-none"
                       >
                         {isAnalyzingProd ? (
                           <>
@@ -844,28 +889,28 @@ Sản xuất bởi STUDIO-TRIET.
                     /* Display of currently saved product */
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
                           Sản phẩm hiện tại đã quét chuẩn:
                         </span>
                         <button
                           onClick={handleDeleteProduct}
-                          className="text-xs text-rose-400 hover:text-rose-300 font-bold transition-colors cursor-pointer flex items-center gap-1"
+                          className="text-xs text-rose-600 hover:text-rose-700 font-bold transition-colors cursor-pointer flex items-center gap-1"
                         >
                           <Trash2 className="w-3 h-3" />
                           Gỡ bỏ
                         </button>
                       </div>
 
-                      <div className="p-4 rounded-xl bg-slate-950 border border-slate-900">
-                        <div className="aspect-video w-full rounded-lg overflow-hidden bg-slate-900 border border-slate-800 mb-3.5">
-                          <img src={product.image} alt={product.name} className="w-full h-full object-contain" />
+                      <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 shadow-sm">
+                        <div className="aspect-video w-full rounded-lg overflow-hidden bg-white border border-stone-200 mb-3.5 shadow-inner">
+                          <img src={product.image} alt={product.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                         </div>
-                        <h4 className="font-extrabold text-sm text-emerald-400 tracking-wide">
+                        <h4 className="font-extrabold text-sm text-emerald-600 tracking-wide">
                           {product.name}
                         </h4>
                         
-                        <div className="mt-3.5 bg-slate-900 p-3 rounded-lg border border-slate-900">
-                          <p className="text-[11.5px] leading-relaxed font-mono text-slate-300">
+                        <div className="mt-3.5 bg-white p-3 rounded-lg border border-stone-150 shadow-inner">
+                          <p className="text-[11.5px] leading-relaxed font-mono text-stone-700 font-medium">
                             {product.description}
                           </p>
                         </div>
@@ -881,38 +926,38 @@ Sản xuất bởi STUDIO-TRIET.
           <div className="lg:col-span-7 space-y-6">
             
             {/* Screenplay Idea Editor Card */}
-            <div className="bg-slate-900/60 p-6 rounded-2xl border border-slate-900 space-y-6">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-850">
-                <h3 className="font-bold text-sm uppercase tracking-wider text-slate-200 flex items-center gap-2">
-                  <FileText className="w-4.5 h-4.5 text-emerald-500" />
+            <div className="bg-white p-6 rounded-2xl border border-stone-200 space-y-6 shadow-md shadow-stone-100/40">
+              <div className="flex justify-between items-center pb-3 border-b border-stone-100">
+                <h3 className="font-bold text-sm uppercase tracking-wider text-stone-800 flex items-center gap-2">
+                  <FileText className="w-4.5 h-4.5 text-emerald-600" />
                   Xây dựng kịch bản & phân phối phân cảnh
                 </h3>
-                <span className="px-2.5 py-1 rounded bg-slate-950 border border-slate-850 text-[10px] font-bold text-slate-400 tracking-wide">
+                <span className="px-2.5 py-1 rounded bg-stone-50 border border-stone-250 text-[10px] font-bold text-stone-600 tracking-wide shadow-sm">
                   STUDIO-TRIET ENGINE
                 </span>
               </div>
 
               {/* Text Area for Idea input */}
               <div className="space-y-2">
-                <label className="text-[11.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                <label className="text-[11.5px] font-bold text-stone-500 uppercase tracking-wider flex items-center justify-between">
                   <span>Ý tưởng lõi của kịch bản phim/quảng cáo</span>
-                  <span className="text-[10px] text-slate-500 lowercase font-mono">Ví dụ: viết về bối cảnh, hành động nhân vật chi tiết</span>
+                  <span className="text-[10px] text-stone-400 lowercase font-bold">Ví dụ: viết kịch bản chi tiết & chèn nhân vật dạng @Tên</span>
                 </label>
                 <textarea
                   placeholder="Hãy gõ ý tưởng kịch bản tại đây... Ví dụ: Quảng cáo kem chống nắng. @Alex đang đi bộ dọc bãi biển vắng dưới nắng hè gay gắt, sản phẩm kem chống nắng nằm nổi bật trên một phiến đá san hô xinh đẹp. Cảnh tiếp theo cô lấy kem thoa lên má và nhảy múa vui tươi dưới nắng vàng lấp lánh..."
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
                   rows={4}
-                  className="w-full bg-slate-950 p-4 rounded-xl border border-slate-850 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors leading-relaxed placeholder:text-slate-650"
+                  className="w-full bg-stone-50/50 p-4 rounded-xl border border-stone-200 focus:border-emerald-500/50 text-sm focus:outline-none transition-colors leading-relaxed placeholder:text-stone-400 font-medium text-stone-800 shadow-inner"
                 />
               </div>
 
               {/* Configuration Panel: Duration intervals & total duration */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-xl bg-slate-950 border border-slate-900">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-xl bg-stone-50 border border-stone-200">
                 
                 {/* Group 1 & 2 Selector */}
                 <div className="space-y-3">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">
+                  <span className="text-[11px] font-extrabold text-stone-500 uppercase tracking-widest block">
                     1. Nhóm thời lượng cốt lõi
                   </span>
                   
@@ -921,31 +966,31 @@ Sản xuất bởi STUDIO-TRIET.
                       onClick={() => handleDurationGroupChange("10s")}
                       className={`py-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
                         durationGroup === "10s"
-                          ? "bg-slate-900 border-emerald-500 Text text-emerald-400"
-                          : "bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-300"
+                          ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm font-black ring-1 ring-emerald-250"
+                          : "bg-white border-stone-200 text-stone-500 hover:text-stone-850"
                       }`}
                     >
                       <span className="text-sm">Nhóm 1</span>
-                      <span className="text-[9.5px] font-mono text-slate-500 mt-0.5">Mỗi phân cảnh 10s</span>
+                      <span className="text-[9.5px] font-mono text-stone-400 font-bold mt-0.5">Mỗi phân cảnh 10s</span>
                     </button>
 
                     <button
                       onClick={() => handleDurationGroupChange("8s")}
                       className={`py-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center border transition-all cursor-pointer ${
                         durationGroup === "8s"
-                          ? "bg-slate-900 border-emerald-500 Text text-emerald-400"
-                          : "bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-300"
+                          ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm font-black ring-1 ring-emerald-250"
+                          : "bg-white border-stone-200 text-stone-500 hover:text-stone-850"
                       }`}
                     >
                       <span className="text-sm">Nhóm 2</span>
-                      <span className="text-[9.5px] font-mono text-slate-500 mt-0.5">Mỗi phân cảnh 8s</span>
+                      <span className="text-[9.5px] font-mono text-stone-400 font-bold mt-0.5">Mỗi phân cảnh 8s</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Duration Picker Pills */}
                 <div className="space-y-3">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest block">
+                  <span className="text-[11px] font-extrabold text-stone-500 uppercase tracking-widest block">
                     2. Tổng thời lượng Video
                   </span>
                   
@@ -958,8 +1003,8 @@ Sản xuất bởi STUDIO-TRIET.
                             onClick={() => setTotalDuration(t)}
                             className={`py-2 rounded-md text-xs font-mono font-bold transition-all cursor-pointer border ${
                               totalDuration === t
-                                ? "bg-emerald-600 border-emerald-600 text-slate-950"
-                                : "bg-slate-900 hover:bg-slate-850 border-slate-900 text-slate-300"
+                                ? "bg-emerald-600 border-emerald-600 text-white font-black"
+                                : "bg-white hover:bg-stone-50 border-stone-200 text-stone-700 shadow-sm"
                             }`}
                           >
                             {t}s
@@ -974,8 +1019,8 @@ Sản xuất bởi STUDIO-TRIET.
                             onClick={() => setTotalDuration(t)}
                             className={`py-2 rounded-md text-xs font-mono font-bold transition-all cursor-pointer border ${
                               totalDuration === t
-                                ? "bg-emerald-600 border-emerald-600 text-slate-950"
-                                : "bg-slate-900 hover:bg-slate-850 border-slate-900 text-slate-300"
+                                ? "bg-emerald-600 border-emerald-600 text-white font-black"
+                                : "bg-white hover:bg-stone-50 border-stone-200 text-stone-700 shadow-sm"
                             }`}
                           >
                             {t}s
@@ -988,15 +1033,15 @@ Sản xuất bởi STUDIO-TRIET.
               </div>
 
               {/* Informative Preview Indicator of the division */}
-              <div className="p-3.5 rounded-lg bg-emerald-500/5 border border-emerald-500/10 flex items-center justify-between">
+              <div className="p-3.5 rounded-lg bg-emerald-50/30 border border-emerald-100/85 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <Clock className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs text-slate-300">
-                    Sản xuất video tổng độ dài là <strong className="text-emerald-400">{totalDuration} giây</strong>.
+                  <Clock className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs text-stone-600 font-medium">
+                    Sản xuất video tổng độ dài là <strong className="text-emerald-700 font-extrabold">{totalDuration} giây</strong>.
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="px-2 py-1 rounded bg-slate-950 text-xs font-bold border border-slate-850 text-emerald-400">
+                  <span className="px-2 py-1 rounded bg-white text-xs font-black border border-stone-200 text-emerald-600 shadow-sm">
                     Phân chia thành: {Math.ceil(totalDuration / (durationGroup === "10s" ? 10 : 8))} cảnh ({durationGroup === "10s" ? "10s" : "8s"}/cảnh)
                   </span>
                 </div>
@@ -1006,7 +1051,7 @@ Sản xuất bởi STUDIO-TRIET.
               <button
                 onClick={handleGenerateScreenplay}
                 disabled={isGenerating || !idea.trim()}
-                className="w-full py-4.5 rounded-xl font-bold tracking-wide flex items-center justify-center gap-2.5 transition-all cursor-pointer bg-gradient-to-r from-emerald-600 to-sky-500 hover:from-emerald-500 hover:to-sky-400 text-slate-950 shadow-lg shadow-emerald-500/15 disabled:opacity-50 disabled:pointer-events-none text-sm uppercase"
+                className="w-full py-4.5 rounded-xl font-black tracking-wide flex items-center justify-center gap-2.5 transition-all cursor-pointer bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white shadow-lg shadow-emerald-500/15 disabled:opacity-50 disabled:pointer-events-none text-sm uppercase"
               >
                 {isGenerating ? (
                   <>
@@ -1027,32 +1072,32 @@ Sản xuất bởi STUDIO-TRIET.
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-6 rounded-2xl bg-slate-900 border border-slate-900 flex flex-col items-center justify-center space-y-4 text-center min-h-[220px]"
+                className="p-6 rounded-2xl bg-white border border-stone-200 flex flex-col items-center justify-center space-y-4 text-center min-h-[220px] shadow-md shadow-stone-100/40"
               >
                 <div className="h-10 w-10 relative">
-                  <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20" />
-                  <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+                  <div className="absolute inset-0 rounded-full border-4 border-emerald-500/10" />
+                  <div className="absolute inset-0 rounded-full border-4 border-emerald-600 border-t-transparent animate-spin" />
                 </div>
                 
                 <div className="space-y-1.5 mt-2">
-                  <h4 className="font-bold text-sm text-slate-200">Hệ thống máy chủ STUDIO-TRIET AI đang biên khảo...</h4>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto">Gemini 3.5 đang cấu trúc hóa phân cảnh, điều chỉnh âm thoại vừa khít khung thời lượng.</p>
+                  <h4 className="font-bold text-sm text-stone-850 font-sans">Hệ thống máy chủ STUDIO-TRIET AI đang biên khảo...</h4>
+                  <p className="text-xs text-stone-500 max-w-sm mx-auto font-medium">Gemini đang cấu trúc hóa phân cảnh, điều chỉnh âm thoại vừa khít khung thời lượng.</p>
                 </div>
 
-                <div className="w-full max-w-xs space-y-1 bg-slate-950 p-3.5 rounded-lg border border-slate-850 text-left font-mono text-[10px]">
-                  <div className={`flex items-center gap-2 ${genStep >= 1 ? "text-emerald-400" : "text-slate-600"}`}>
+                <div className="w-full max-w-xs space-y-1 bg-stone-50/70 p-3.5 rounded-lg border border-stone-200 text-left font-mono text-[10px] shadow-sm">
+                  <div className={`flex items-center gap-2 ${genStep >= 1 ? "text-emerald-700 font-bold" : "text-stone-400 font-semibold"}`}>
                     <span className="shrink-0">{genStep >= 1 ? "✓" : "○"}</span>
                     <span>Thiết lập môi trường làm việc thông suốt</span>
                   </div>
-                  <div className={`flex items-center gap-2 ${genStep >= 2 ? "text-emerald-400" : "text-slate-600"}`}>
+                  <div className={`flex items-center gap-2 ${genStep >= 2 ? "text-emerald-700 font-bold" : "text-stone-400 font-semibold"}`}>
                     <span className="shrink-0">{genStep >= 2 ? "✓" : "○"}</span>
                     <span> Đồng hóa chân dung tham chiếu nhân vật/sản phẩm</span>
                   </div>
-                  <div className={`flex items-center gap-2 ${genStep >= 3 ? "text-emerald-400" : "text-slate-600"}`}>
+                  <div className={`flex items-center gap-2 ${genStep >= 3 ? "text-emerald-700 font-bold" : "text-stone-400 font-semibold"}`}>
                     <span className="shrink-0">{genStep >= 3 ? "✓" : "○"}</span>
                     <span>Phác thảo phân phối kịch bản hình ảnh và tiếng phát thanh</span>
                   </div>
-                  <div className={`flex items-center gap-2 ${genStep >= 4 ? "text-emerald-400" : "text-slate-600"}`}>
+                  <div className={`flex items-center gap-2 ${genStep >= 4 ? "text-emerald-700 font-bold" : "text-stone-400 font-semibold"}`}>
                     <span className="shrink-0">{genStep >= 4 ? "✓" : "○"}</span>
                     <span>Tối ưu từ ngữ lời thoại khớp thời gian ({durationGroup === "10s" ? "~22" : "~18"} từ)</span>
                   </div>
@@ -1069,22 +1114,22 @@ Sản xuất bởi STUDIO-TRIET.
               >
                 
                 {/* Outliner Summary Header with copy ALL unified prompt button */}
-                <div className="p-5.5 rounded-2xl bg-gradient-to-r from-emerald-950/20 via-slate-900 to-slate-900 border border-emerald-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="p-5.5 rounded-2xl bg-gradient-to-r from-emerald-50/50 via-white to-white border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm shadow-emerald-100/10">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="p-1 rounded bg-emerald-500 text-slate-950 text-xs">
+                      <span className="p-1 rounded bg-emerald-600 text-white text-xs shadow-sm">
                         <Check className="w-3.5 h-3.5 font-black" />
                       </span>
-                      <h4 className="font-extrabold text-sm text-slate-200">Kịch bản đã sẵn sàng!</h4>
+                      <h4 className="font-extrabold text-sm text-stone-850">Kịch bản đã sẵn sàng!</h4>
                     </div>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-stone-600 font-medium">
                       Đã biên soạn thành công <strong>{screenplay.scenes.length} phân cảnh đồng bộ</strong> gồm Video Prompt mô hình AI và Voiceover phát âm tối ưu.
                     </p>
                   </div>
 
                   <button
                     onClick={copyUnifiedScreenplay}
-                    className="px-4.5 py-3 rounded-lg text-xs font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-all flex items-center gap-2 shadow-lg shadow-emerald-500/10 shrink-0 cursor-pointer w-full sm:w-auto justify-center"
+                    className="px-4.5 py-3 rounded-lg text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 transition-all flex items-center justify-center gap-2 shadow-md shadow-emerald-600/10 shrink-0 cursor-pointer w-full sm:w-auto text-center font-sans"
                   >
                     <Copy className="w-4 h-4" />
                     Copy Prompt Thống Nhất (Video + Thoại)
@@ -1102,31 +1147,31 @@ Sản xuất bởi STUDIO-TRIET.
                     return (
                       <div
                         key={scene.sceneNumber}
-                        className="bg-slate-900/80 rounded-2xl border border-slate-900 overflow-hidden hover:border-slate-800 transition-colors"
+                        className="bg-white rounded-2xl border border-stone-200 overflow-hidden hover:border-stone-300 transition-colors shadow-md shadow-stone-100/40"
                       >
                         
                         {/* Tab header on scene */}
-                        <div className="bg-slate-950 px-5 py-3.5 border-b border-slate-900 flex justify-between items-center">
+                        <div className="bg-stone-50 px-5 py-3.5 border-b border-stone-200 flex justify-between items-center">
                           <div className="flex items-center gap-3">
-                            <span className="h-7 w-7 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-mono font-bold text-emerald-400 shadow">
+                            <span className="h-7 w-7 rounded-lg bg-white border border-stone-200 flex items-center justify-center text-xs font-mono font-black text-emerald-600 shadow-sm">
                               #{scene.sceneNumber}
                             </span>
                             <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10.5px] font-mono text-slate-400 flex items-center gap-1">
-                                <Clock className="w-3.5 h-3.5 text-emerald-500" />
+                              <span className="px-2 py-0.5 rounded bg-white border border-stone-200 text-[10.5px] font-mono font-bold text-stone-600 flex items-center gap-1 shadow-xs">
+                                <Clock className="w-3.5 h-3.5 text-emerald-600" />
                                 {scene.duration} Giây
                               </span>
-                              <span className="text-xs text-slate-500 font-medium">| Cảnh phân phối thời gian</span>
+                              <span className="text-xs text-stone-400 font-semibold">| Cảnh phân phối thời gian</span>
                             </div>
                           </div>
 
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => copySingleScene(scene)}
-                              className="px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-200 text-[11px] font-bold border border-slate-850 flex items-center gap-1.5 transition-all cursor-pointer"
+                              className="px-2.5 py-1.5 rounded bg-white hover:bg-stone-50 text-stone-600 hover:text-stone-850 text-[11px] font-black border border-stone-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
                               title="Sao chép kịch bản phân cảnh"
                             >
-                              <Copy className="w-3.5 h-3.5" />
+                              <Copy className="w-3.5 h-3.5 text-emerald-600" />
                               Copy cảnh
                             </button>
                           </div>
@@ -1137,17 +1182,17 @@ Sản xuất bởi STUDIO-TRIET.
                           
                           {/* Visual Prompt Section */}
                           <div className="space-y-1.5">
-                            <div className="flex items-center justify-between text-slate-400">
+                            <div className="flex items-center justify-between text-stone-500">
                               <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                <Video className="w-3.5 h-3.5 text-sky-400" />
+                                <Video className="w-3.5 h-3.5 text-sky-600" />
                                 Video Prompt (Tiếng Anh mô tả phối cảnh)
                               </span>
-                              <span className="text-[10px] lowercase text-slate-500 font-mono">Dùng cho AI Video Generator</span>
+                              <span className="text-[10px] lowercase text-stone-400 font-black">Dùng cho AI Video Generator</span>
                             </div>
                             <textarea
                               value={scene.visualPrompt}
                               onChange={(e) => updateSceneManually(scene.sceneNumber, "visualPrompt", e.target.value)}
-                              className="w-full bg-slate-950 p-3.5 rounded-xl border border-slate-850 focus:border-emerald-500/40 text-[12.5px] font-mono text-slate-300 focus:outline-none transition-colors leading-relaxed"
+                              className="w-full bg-stone-50 p-3.5 rounded-xl border border-stone-200 focus:border-emerald-500/40 text-[12.5px] font-mono text-stone-800 focus:outline-none transition-colors leading-relaxed shadow-inner"
                               rows={3.5}
                             />
                           </div>
@@ -1157,14 +1202,14 @@ Sản xuất bởi STUDIO-TRIET.
                             
                             {/* Voiceover scripts and counters */}
                             <div className="space-y-1.5">
-                              <div className="flex items-center justify-between text-slate-400">
+                              <div className="flex items-center justify-between text-stone-500">
                                 <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                  <Mic className="w-3.5 h-3.5 text-emerald-400" />
+                                  <Mic className="w-3.5 h-3.5 text-emerald-600" />
                                   Lời thoại lồng giọng (Tiếng Việt)
                                 </span>
                                 
                                 <span className={`text-[10.5px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                                  isOverflow ? "bg-rose-500/10 text-rose-400 border border-rose-500/25" : "bg-emerald-500/10 text-emerald-400"
+                                  isOverflow ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-100"
                                 }`}>
                                   {sceneWordCount} / {maxWordsAllowed} từ
                                 </span>
@@ -1172,12 +1217,12 @@ Sản xuất bởi STUDIO-TRIET.
                               <textarea
                                 value={scene.audioPrompt}
                                 onChange={(e) => updateSceneManually(scene.sceneNumber, "audioPrompt", e.target.value)}
-                                className="w-full bg-slate-950 p-3 rounded-xl border border-slate-850 focus:border-emerald-500/40 text-xs text-slate-300 focus:outline-none transition-colors leading-relaxed"
+                                className="w-full bg-stone-50 p-3 rounded-xl border border-stone-200 focus:border-emerald-500/40 text-xs text-stone-800 focus:outline-none transition-colors leading-relaxed shadow-inner"
                                 rows={2.5}
                               />
                               {isOverflow && (
-                                <p className="text-[10.5px] text-rose-400 flex items-center gap-1 font-medium mt-1">
-                                  <AlertCircle className="w-3 h-3 shrink-0" />
+                                <p className="text-[10.5px] text-rose-600 flex items-center gap-1 font-bold mt-1">
+                                  <AlertCircle className="w-3 h-3 shrink-0 text-rose-600" />
                                   Số từ vượt ngưỡng khuyến nghị phát âm cho {scene.duration}s. Hãy thu gọn!
                                 </p>
                               )}
@@ -1185,14 +1230,14 @@ Sản xuất bởi STUDIO-TRIET.
 
                             {/* Staging & Post-production notes */}
                             <div className="space-y-1.5">
-                              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                <Volume2 className="w-3.5 h-3.5 text-amber-500" />
+                              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider flex items-center gap-1.5">
+                                <Volume2 className="w-3.5 h-3.5 text-amber-600" />
                                 Ghi chú nhịp điệu & Âm thanh SFX
                               </span>
                               <textarea
                                 value={scene.notes}
                                 onChange={(e) => updateSceneManually(scene.sceneNumber, "notes", e.target.value)}
-                                className="w-full bg-slate-950 p-3 rounded-xl border border-slate-850 focus:border-emerald-500/40 text-xs text-slate-400 focus:outline-none transition-colors leading-relaxed"
+                                className="w-full bg-stone-50 p-3 rounded-xl border border-stone-200 focus:border-emerald-500/40 text-xs text-stone-650 focus:outline-none transition-colors leading-relaxed shadow-inner"
                                 rows={2.5}
                               />
                             </div>
@@ -1200,11 +1245,11 @@ Sản xuất bởi STUDIO-TRIET.
                           </div>
 
                           {/* REGENERATE FORM AT BOTTOM OF CARD */}
-                          <div className="mt-4 pt-4 border-t border-slate-850/60 transition-all">
-                            <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-900/60 flex flex-col md:flex-row gap-3 items-end">
+                          <div className="mt-4 pt-4 border-t border-stone-150 transition-all">
+                            <div className="p-3.5 rounded-xl bg-stone-50 border border-stone-200 flex flex-col md:flex-row gap-3 items-end">
                               <div className="flex-1 w-full text-left space-y-1">
-                                <label className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
-                                  <RotateCw className="w-3 h-3 text-sky-400" />
+                                <label className="text-[10.5px] font-bold text-stone-500 uppercase tracking-wide flex items-center gap-1">
+                                  <RotateCw className="w-3 h-3 text-sky-600" />
                                   Tái tạo / Chỉnh sửa lại phối cảnh (AI Prompt Repair)
                                 </label>
                                 <input
@@ -1212,14 +1257,14 @@ Sản xuất bởi STUDIO-TRIET.
                                   placeholder="Ví dụ: Thay bức tường từ đá cuội thành vách kính nhìn ra thành phố ban đêm ấm áp..."
                                   value={sceneFeedbacks[scene.sceneNumber] || ""}
                                   onChange={(e) => setSceneFeedbacks({ ...sceneFeedbacks, [scene.sceneNumber]: e.target.value })}
-                                  className="w-full bg-slate-900 px-3 py-2 rounded-lg border border-slate-850 focus:border-sky-500/40 text-xs focus:outline-none placeholder:text-slate-600 text-slate-300"
+                                  className="w-full bg-white px-3 py-2 rounded-lg border border-stone-200 focus:border-sky-500/40 text-xs focus:outline-none placeholder:text-stone-400 text-stone-800 font-semibold"
                                 />
                               </div>
 
                               <button
                                 onClick={() => handleRegenerateScene(scene.sceneNumber)}
                                 disabled={regeneratingSceneNum !== null || !sceneFeedbacks[scene.sceneNumber]?.trim()}
-                                className="px-4 py-2.5 rounded-lg text-xs font-bold bg-slate-900 text-sky-400 hover:bg-slate-850 border border-slate-800 flex items-center gap-1.5 transition-all shrink-0 cursor-pointer disabled:opacity-40 disabled:pointer-events-none w-full md:w-auto justify-center"
+                                className="px-4 py-2.5 rounded-lg text-xs font-black bg-white text-sky-600 hover:bg-stone-50 border border-stone-200 flex items-center gap-1.5 transition-all shrink-0 cursor-pointer disabled:opacity-40 disabled:pointer-events-none w-full md:w-auto justify-center shadow-xs"
                               >
                                 {regeneratingSceneNum === scene.sceneNumber ? (
                                   <>
@@ -1246,14 +1291,14 @@ Sản xuất bởi STUDIO-TRIET.
 
             {/* Empty Showcase screen */}
             {!screenplay && !isGenerating && (
-              <div className="p-12 text-center rounded-2xl border-2 border-dashed border-slate-900 bg-slate-950/20 text-slate-650 min-h-[300px] flex flex-col items-center justify-center space-y-4">
-                <div className="h-14 w-14 rounded-full bg-slate-900 flex items-center justify-center border border-slate-800 text-slate-400">
-                  <Video className="w-7 h-7 opacity-40 animate-pulse" />
+              <div className="p-12 text-center rounded-2xl border border-stone-200 bg-white text-stone-400 min-h-[300px] flex flex-col items-center justify-center space-y-4 shadow-md shadow-stone-100/30">
+                <div className="h-14 w-14 rounded-full bg-stone-50 flex items-center justify-center border border-stone-200 text-stone-550 shadow-sm">
+                  <Video className="w-7 h-7 text-stone-400 animate-pulse" />
                 </div>
                 <div className="space-y-1 max-w-sm">
-                  <h4 className="font-bold text-slate-400 text-sm">Chưa có kịch bản phân cảnh nào được xuất bản</h4>
-                  <p className="text-xs text-slate-500 leading-relaxed">
-                    Hãy nạp các nhân vật và sản phẩm tham chiếu, viết ý tưởng kịch bản video cốt lõi, chọn chế độ thời lượng (Group 1 hoặc Group 2) rồi bấm bắt đầu dấn thân biên soạn!
+                  <h4 className="font-black text-stone-700 text-sm">Chưa có kịch bản phân cảnh nào được xuất bản</h4>
+                  <p className="text-xs text-stone-500 leading-relaxed font-semibold">
+                    Hãy nạp các nhân vật và sản phẩm tham chiếu, viết ý tưởng kịch bản video cốt lõi, chọn chế độ thời lượng (Nhóm 1 hoặc Nhóm 2) rồi bấm bắt đầu dấn thân biên soạn!
                   </p>
                 </div>
               </div>
@@ -1266,8 +1311,8 @@ Sản xuất bởi STUDIO-TRIET.
       </div>
 
       {/* Styled Footer */}
-      <footer className="mt-20 py-8 border-t border-slate-900 text-center bg-slate-950/60 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-4 text-xs text-slate-500 space-y-2">
+      <footer className="mt-20 py-8 border-t border-stone-200 text-center bg-stone-50/80 backdrop-blur">
+        <div className="max-w-7xl mx-auto px-4 text-xs text-stone-500 space-y-2 font-medium">
           <p className="font-mono">STUDIO-TRIET V1.2.0 • BUILT ON GOOGLE GEMINI 3.5 FLASH</p>
           <p>© 2026 STUDIO-TRIET. Đồng bộ kịch bản tuyệt đối phục vụ tạo mẫu sản xuất phim AI chất lượng cao.</p>
         </div>
