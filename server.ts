@@ -54,6 +54,37 @@ function parseBase64Image(dataUrl: string) {
   };
 }
 
+// 2.5 Robust Dynamic retry function to combat 503 Service Unavailable / Gateway Timeout errors
+async function callGeminiDynamic(params: any, maxRetries = 3, delayMs = 1500) {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const ai = getGenAI();
+      const response = await ai.models.generateContent(params);
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      const status = error?.status || error?.statusCode || 500;
+      const errorMsg = String(error.message || "").toLowerCase();
+      console.warn(`[STUDIO-TRIET Gemini Retry] Attempt ${attempt} failed with status ${status}:`, error.message || error);
+      
+      const isTransient = status === 503 || status === 502 || status === 504 || status === 429 ||
+                          errorMsg.includes("503") || errorMsg.includes("502") || errorMsg.includes("504") || errorMsg.includes("429") ||
+                          errorMsg.includes("unavailable") || errorMsg.includes("overloaded") || errorMsg.includes("timeout") ||
+                          errorMsg.includes("capacity") || errorMsg.includes("exhausted");
+                          
+      if (attempt < maxRetries && isTransient) {
+        const sleepTime = delayMs * Math.pow(2, attempt - 1);
+        console.log(`[STUDIO-TRIET Gemini Retry] Waiting ${sleepTime}ms before attempt ${attempt + 1}...`);
+        await new Promise((resolve) => setTimeout(resolve, sleepTime));
+      } else {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
+
 // 1. API: Analyze Character Reference Photos
 app.post("/api/analyze-character", async (req, res) => {
   try {
@@ -165,7 +196,7 @@ YÊU CẦU QUAN TRỌNG VỀ ĐỒNG BỘ VIDEO VÀ AUDIO:
 4. Lời thoại (audioPrompt): Viết bằng TIẾNG VIỆT tự nhiên, súc tích, cực kỳ truyền cảm bám sát kịch bản, khớp với hoạt cảnh diễn ra.
 5. Ghi chú phân cảnh (notes): Viết bằng TIẾNG VIỆT về chuyển động, biểu cảm, nhịp điệu diễn xuất hoặc chuyển động của máy quay, âm thanh bối cảnh (SFX, Ambient).`;
 
-    const response = await ai.models.generateContent({
+    const response = await callGeminiDynamic({
       model: "gemini-3.5-flash",
       contents: promptText,
       config: {
@@ -269,7 +300,7 @@ HÃY TẠO LẠI PHÂN CẢNH SỐ ${targetSceneNumber} NÀY để đáp ứng m
 Đảm bảo lời thoại tiếng Việt (audioPrompt) cực kỳ ngắn gọn, sắc sảo và KHÔNG vượt quá ${maxWords} từ để vừa khít thời lượng ${durationUnit}s.
 Visual prompt cho video phải viết bằng tiếng Anh chi tiết cao (khoảng 100 từ).`;
 
-    const response = await ai.models.generateContent({
+    const response = await callGeminiDynamic({
       model: "gemini-3.5-flash",
       contents: contextPrompt,
       config: {
