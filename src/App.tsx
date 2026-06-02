@@ -30,7 +30,10 @@ import {
   RefreshCw,
   Upload,
   ArrowRight,
-  Maximize2
+  Maximize2,
+  Eye,
+  EyeOff,
+  Key
 } from "lucide-react";
 import { Character, Product, ScreenplayScene, Screenplay } from "./types";
 
@@ -74,14 +77,32 @@ export default function App() {
   const [clientApiKey, setClientApiKey] = useState<string>(() => {
     return localStorage.getItem("STUDIO_TRIET_CLIENT_API_KEY") || "";
   });
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isKeySaved, setIsKeySaved] = useState<boolean>(() => {
+    return !!localStorage.getItem("STUDIO_TRIET_CLIENT_API_KEY");
+  });
 
   useEffect(() => {
     localStorage.setItem("STUDIO_TRIET_USE_DIRECT_GEMINI", String(useDirectGemini));
   }, [useDirectGemini]);
 
-  useEffect(() => {
-    localStorage.setItem("STUDIO_TRIET_CLIENT_API_KEY", clientApiKey);
-  }, [clientApiKey]);
+  const handleSaveApiKey = () => {
+    const trimmed = clientApiKey.trim();
+    if (!trimmed) {
+      showNotification("Vui lòng nhập mã khóa API trước khi lưu!", "error");
+      return;
+    }
+    localStorage.setItem("STUDIO_TRIET_CLIENT_API_KEY", trimmed);
+    setIsKeySaved(true);
+    showNotification("Đã lưu mã khóa API vào LocalStorage trình duyệt của bạn thành công! Từ giờ bạn không cần nhập lại nữa.", "success");
+  };
+
+  const handleClearApiKey = () => {
+    setClientApiKey("");
+    localStorage.removeItem("STUDIO_TRIET_CLIENT_API_KEY");
+    setIsKeySaved(false);
+    showNotification("Đã xóa mã khóa API khỏi thiết bị của bạn thành công.", "info");
+  };
 
   // Direct client-side calls to official Google Gemini API - perfectly bypasses Node server for Netlify static deployments
   const callGeminiRestDirect = async (prompt: string, schema: any) => {
@@ -979,6 +1000,13 @@ ${scene.notes}`;
     showNotification(`Đã sao chép kịch bản Phân cảnh #${scene.sceneNumber}!`, "success");
   };
 
+  // Copy Gộp Prompt (Both Visual Prompt and Audio/Voiceover united into 1 single block for easy copy-pasting to video generators)
+  const copyMergedPrompt = (scene: ScreenplayScene) => {
+    const mergedText = `${scene.visualPrompt.trim()}\n\nVoiceover / Audio spoken in direct Vietnamese: "${scene.audioPrompt.trim()}"`;
+    navigator.clipboard.writeText(mergedText);
+    showNotification(`Đã gộp và sao chép Prompt Phân cảnh #${scene.sceneNumber} thành công!`, "success");
+  };
+
   // 6. Global action to copy the entire unified screenplay
   const copyUnifiedScreenplay = () => {
     if (!screenplay) return;
@@ -1147,22 +1175,71 @@ Sản xuất bởi STUDIO-TRIET.
                 </div>
 
                 {useDirectGemini && (
-                  <div className="space-y-2 pt-1">
-                    <label className="text-[11px] font-bold text-stone-500 block uppercase tracking-wide">
-                      Mã khóa Gemini API của bạn (Private Key)
-                    </label>
-                    <div className="relative">
+                  <div className="space-y-2.5 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-stone-500 block uppercase tracking-wide">
+                        Mã khóa Gemini API của bạn (Private Key)
+                      </label>
+                      {isKeySaved ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-50 text-[10px] font-extrabold text-emerald-700 border border-emerald-150">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Đã lưu trữ
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 text-[10px] font-extrabold text-amber-700 border border-amber-150">
+                          Chưa lưu cố định
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="relative flex items-center">
                       <input
-                        type="password"
+                        type={showApiKey ? "text" : "password"}
                         placeholder="Hãy dán mã AIzaSy... của bạn tại đây"
                         value={clientApiKey}
-                        onChange={(e) => setClientApiKey(e.target.value)}
-                        className="w-full bg-stone-50 px-3.5 py-2 rounded-lg border border-stone-350 focus:border-emerald-500 focus:bg-white text-xs focus:outline-none transition-all font-mono text-stone-800"
+                        onChange={(e) => {
+                          setClientApiKey(e.target.value);
+                          setIsKeySaved(false); // Mark as unsaved until they hit save explicitly
+                        }}
+                        className="w-full bg-stone-50 pl-3.5 pr-10 py-2 rounded-lg border border-stone-350 focus:border-emerald-500 focus:bg-white text-xs focus:outline-none transition-all font-mono text-stone-800 shadow-sm"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 text-stone-400 hover:text-stone-600 focus:outline-none"
+                        title={showApiKey ? "Ẩn mã khóa" : "Hiển thị mã khóa"}
+                      >
+                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
-                    <div className="flex justify-between items-center px-0.5 pt-0.5">
-                      <span className="text-[9.5px] text-stone-400 font-bold leading-tight">
-                        Lưu ẩn an toàn tại LocalStorage trình duyệt của bạn.
+
+                    {/* Explicit Save & Clear Button Board */}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveApiKey}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-all shadow-sm active:scale-[0.98]"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        Lưu Lên Thiết Bị
+                      </button>
+                      
+                      {isKeySaved && (
+                        <button
+                          type="button"
+                          onClick={handleClearApiKey}
+                          className="flex items-center justify-center gap-1 py-1.5 px-2.5 bg-stone-50 hover:bg-red-50 text-stone-600 hover:text-red-700 border border-stone-200 hover:border-red-200 font-bold rounded-lg text-xs transition-all"
+                          title="Xóa khóa khỏi trình duyệt"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Xóa Khóa
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex justify-between items-center px-0.5 pt-0.5 leading-tight">
+                      <span className="text-[9.5px] text-stone-400 font-medium max-w-[70%]">
+                        Lưu ẩn và mã hóa an toàn tại LocalStorage máy khách. Không gửi lên máy chủ tĩnh.
                       </span>
                       <a
                         href="https://aistudio.google.com/app/apikey"
@@ -1832,11 +1909,20 @@ Sản xuất bởi STUDIO-TRIET.
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => copySingleScene(scene)}
-                              className="px-2.5 py-1.5 rounded bg-white hover:bg-stone-50 text-stone-600 hover:text-stone-850 text-[11px] font-black border border-stone-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-                              title="Sao chép kịch bản phân cảnh"
+                              className="px-2.5 py-1.5 rounded bg-white hover:bg-stone-50 text-stone-600 hover:text-stone-850 text-[11px] font-bold border border-stone-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                              title="Sao chép kịch bản phân cảnh đầy đủ"
                             >
-                              <Copy className="w-3.5 h-3.5 text-emerald-600" />
-                              Copy cảnh
+                              <Copy className="w-3.5 h-3.5 text-stone-400" />
+                              Copy kịch bản
+                            </button>
+
+                            <button
+                              onClick={() => copyMergedPrompt(scene)}
+                              className="px-2.5 py-1.5 rounded bg-emerald-55 hover:bg-emerald-100 text-emerald-800 hover:text-emerald-950 text-[11px] font-black border border-emerald-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                              title="Gộp Prompt Video & Audio làm 1"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-emerald-650 animate-pulse" />
+                              Gộp & Copy Prompt
                             </button>
                           </div>
                         </div>
@@ -1906,6 +1992,31 @@ Sản xuất bởi STUDIO-TRIET.
                               />
                             </div>
 
+                          </div>
+
+                          {/* Consolidated Unified Prompt Box (Merged Prompt Video + Audio lồng tiếng) */}
+                          <div className="p-3.5 bg-emerald-50/40 rounded-xl border border-emerald-150 space-y-2 text-left shadow-xs">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                              <span className="text-[11px] font-extrabold text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                                Prompt Gộp Đồng Bộ (Dán Trực Tiếp Vào AI Tạo Video)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => copyMergedPrompt(scene)}
+                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10.5px] tracking-wide flex items-center justify-center gap-1 transition-all active:scale-[0.97] cursor-pointer shadow-xs self-start sm:self-auto"
+                              >
+                                <Copy className="w-3 h-3" />
+                                Sao chép Prompt Gộp
+                              </button>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-stone-900 border border-stone-850 text-[11.5px] font-mono text-emerald-400 leading-relaxed shadow-inner overflow-x-auto whitespace-pre-wrap select-all cursor-text" title="Bấm đúp chuột hoặc chạm giữ để bôi đen toàn bộ">
+                              {`${(scene.visualPrompt || "").trim()}\n\nVoiceover / Audio monologue spoken in direct Vietnamese: "${(scene.audioPrompt || "").trim()}"`}
+                            </div>
+                            <p className="text-[10px] text-emerald-800 font-bold leading-tight flex items-center gap-1">
+                              <span>💡</span>
+                              <span>Mẹo: Prompt này tự động chứa cả đặc tả khung hình tiếng Anh và nhãn lời thoại lồng tiếng giúp AI tạo video khớp đồng bộ hoàn hảo!</span>
+                            </p>
                           </div>
 
                           {/* REGENERATE FORM AT BOTTOM OF CARD */}
